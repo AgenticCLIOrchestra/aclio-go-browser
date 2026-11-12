@@ -1,0 +1,111 @@
+// Package preset defines agent personas: which actions an agent may take, how
+// it may target elements, what page state it perceives each turn, and how that
+// state is described to it.
+//
+// The built-ins (Default, Full, Blind, Motor) are functions that return a
+// fresh Preset, so a caller can start from one and change it freely:
+//
+//	p := preset.Default()
+//	p.Name = "no-scripts"
+//	p.Actions = slices.DeleteFunc(p.Actions, func(t action.Type) bool {
+//	    return t == action.TypeJavascript
+//	})
+//
+// or build one from scratch with any mix of action types. Call Validate before
+// using a hand-built Preset.
+package preset
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+
+	"github.com/agenticcliorchestra/aclio-go-browser/action"
+)
+
+// Preset is an agent persona. A preset shapes what the agent is offered (its
+// schema, prompt and perceived state); Check is how a caller enforces it on
+// the actions that come back.
+type Preset struct {
+	// Name labels the preset in logs and prompts.
+	Name string
+	// Actions are the action types the agent may emit, in schema order.
+	Actions []action.Type
+	// Targeting says how the agent may pick elements.
+	Targeting action.Targeting
+	// Perceive says which page state is captured each turn.
+	Perceive Perception
+	// Describe renders the captured State as the text the agent is given
+	// about the page each turn.
+	Describe func(State) string
+}
+
+// Perception selects which page state is captured each turn.
+type Perception struct {
+	Screenshot bool // a PNG of the viewport
+	DOM        bool // the full DOM as HTML
+	Focused    bool // a screen-reader view of the focused element
+	Tabs       bool // the open tabs, active one flagged
+}
+
+// Validate reports every problem with p: a missing name or Describe, no
+// actions, unknown or duplicate action types, and actions that need a target
+// when Targeting allows none.
+func Validate(p Preset) error {
+	var errs []error
+	if p.Name == "" {
+		errs = append(errs, errors.New("name is empty"))
+	}
+	if p.Describe == nil {
+		errs = append(errs, errors.New("describe is nil"))
+	}
+	if _, err := Schema(p); err != nil {
+		errs = append(errs, err)
+	}
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("preset %q: %w", p.Name, err)
+	}
+	return nil
+}
+
+// Schema returns the JSON schema of one action the agent may emit under p.
+func Schema(p Preset) (map[string]any, error) {
+	return action.Schema(p.Actions, p.Targeting)
+}
+
+// Allows reports whether p lets the agent emit action type t.
+func Allows(p Preset, t action.Type) bool {
+	return slices.Contains(p.Actions, t)
+}
+
+// Check reports why a can't be performed under p: a type p doesn't allow, a
+// payload that fails action.Validate, or a target kind p's Targeting doesn't
+// allow. It returns nil when a is fine to perform.
+func Check(p Preset, a action.Action) error {
+	if !Allows(p, a.Type) {
+		return fmt.Errorf("%s: not allowed by preset %q", a.Type, p.Name)
+	}
+	if err := action.Validate(a); err != nil {
+		return err
+	}
+	return action.CheckTargeting(a, p.Targeting)
+}
+
+// UsesArtifacts reports whether p allows any action that reads or writes the
+// artifacts directory, so a run with p needs one configured.
+func UsesArtifacts(p Preset) bool {
+	return slices.ContainsFunc(p.Actions, action.IsArtifact)
+}
+
+// WithArtifacts returns a copy of p that also allows the artifact actions
+// (screenshot, createArtifact, readArtifact, listArtifacts) it doesn't
+// already allow.
+func WithArtifacts(p Preset) Preset {
+	p.Actions = slices.Clone(p.Actions)
+	for _, t := range action.ArtifactTypes() {
+		if !Allows(p, t) {
+			p.Actions = append(p.Actions, t)
+		}
+	}
+	return p
+}
