@@ -9,11 +9,20 @@ import (
 
 	"github.com/agenticcliorchestra/aclio-go-browser/preset"
 	"github.com/mxschmitt/playwright-go"
+	"github.com/yosssi/gohtml"
 )
 
 // snapshotStampLayout names each turn's files: fixed-width UTC, no colons, so
 // they sort chronologically and are valid on every OS.
 const snapshotStampLayout = "20060102T150405.000000000Z"
+
+// formatDOM puts each element on its own indented line. Pages often come back
+// from Content() as a few enormous lines, and the agent reads the file by line
+// range, so a one-line DOM would be unreadable to it. Whitespace inside text
+// (e.g. in <pre>) may be re-indented; the structure is unchanged.
+func formatDOM(dom string) string {
+	return gohtml.Format(dom)
+}
 
 // Snapshot captures the parts of the active tab's state that perceive asks
 // for. The screenshot and DOM are written into dir (created if needed) as
@@ -49,7 +58,7 @@ func Snapshot(b *Browser, perceive preset.Perception, dir string) (preset.State,
 			if err != nil {
 				return preset.State{}, fmt.Errorf("session: capturing DOM: %w", err)
 			}
-			if err := os.WriteFile(st.DOMPath, []byte(dom), 0o644); err != nil {
+			if err := os.WriteFile(st.DOMPath, []byte(formatDOM(dom)), 0o644); err != nil {
 				return preset.State{}, fmt.Errorf("session: writing DOM: %w", err)
 			}
 		}
