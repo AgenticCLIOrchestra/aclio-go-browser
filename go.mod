@@ -3,7 +3,7 @@ module github.com/agenticcliorchestra/aclio-go-browser
 go 1.26.0
 
 require (
-	github.com/agenticcliorchestra/aclio-go v0.11.3
+	github.com/agenticcliorchestra/aclio-go v0.12.0
 	github.com/mxschmitt/playwright-go v0.6401.0
 )
 
