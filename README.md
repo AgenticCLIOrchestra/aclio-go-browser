@@ -144,7 +144,7 @@ if err := action.Validate(a); err != nil {
 
 `Validate` checks that the payload matches the type and follows that type's rules. Two of them are safety rules, so they apply whatever the agent sends:
 
-- **`goTo` only navigates to http(s) or relative URLs.** `javascript:` (including spellings padded with whitespace or tabs), `file:`, `data:`, `chrome:` and every other scheme are refused, so turning off the `javascript` action can't be bypassed through navigation. A relative URL must also resolve to http(s), so it can't inherit `about:` or `file:` from the current page.
+- **`goTo` only navigates to http(s) URLs, `about:blank` or relative URLs.** `javascript:` (including spellings padded with whitespace or tabs), `file:`, `data:`, `chrome:`, every other `about:` page (e.g. Firefox's `about:config`) and every other scheme are refused, so turning off the `javascript` action can't be bypassed through navigation. A relative URL must also resolve to http(s), so it can't inherit `about:` or `file:` from the current page.
 - **Artifact file names must be plain names.** No path separators of either kind, no `:`, no `.`/`..`, no NUL, at most 255 bytes (including `.png` for screenshots). `"../../.bashrc"` is refused.
 
 ## preset

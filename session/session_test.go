@@ -17,6 +17,8 @@ func TestResolveGoTo(t *testing.T) {
 		{"https://x.com/a/b", "../up", "https://x.com/up"},
 		{"https://x.com/a/b", "c?q=1", "https://x.com/a/c?q=1"},
 		{"http://x.com/", "#frag", "http://x.com/#frag"},
+		{"https://x.com/a", "about:blank", "about:blank"},
+		{"about:blank", "https://x.com/", "https://x.com/"},
 	}
 	for _, c := range cases {
 		got, err := resolveGoTo(c.current, c.raw)
@@ -29,6 +31,7 @@ func TestResolveGoTo(t *testing.T) {
 		{"https://x.com/", "javascript:alert(1)"},
 		{"https://x.com/", "file:///etc/passwd"},
 		{"about:blank", "/relative"},
+		{"https://x.com/", "about:config"},
 		{"file:///tmp/page.html", "other.html"},
 	}
 	for _, c := range bad {

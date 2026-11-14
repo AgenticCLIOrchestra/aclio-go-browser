@@ -123,10 +123,11 @@ func validateIndex(i int) error {
 }
 
 // ValidateURL checks a goTo target. Relative references (path, root-relative,
-// query or fragment) are allowed, as are absolute http and https URLs. Every
-// other scheme is refused: javascript: would run script even when the
-// javascript action is not allowed, and file:, data:, chrome: and the like
-// reach beyond the web page the agent is meant to drive.
+// query or fragment) are allowed, as are absolute http and https URLs and
+// about:blank, an empty page. Every other scheme is refused: javascript: would
+// run script even when the javascript action is not allowed, and file:,
+// data:, chrome:, other about: pages (e.g. Firefox's about:config) and the
+// like reach beyond the web page the agent is meant to drive.
 func ValidateURL(raw string) error {
 	if strings.TrimSpace(raw) == "" {
 		return errors.New("url is empty")
@@ -143,8 +144,13 @@ func ValidateURL(raw string) error {
 	switch strings.ToLower(u.Scheme) {
 	case "", "http", "https":
 		return nil
+	case "about":
+		if u.Opaque == "blank" && u.RawQuery == "" && u.Fragment == "" {
+			return nil
+		}
+		return fmt.Errorf("url %q: of the about: pages only about:blank is allowed", raw)
 	default:
-		return fmt.Errorf("url %q: scheme %q is not allowed, only http and https", raw, u.Scheme)
+		return fmt.Errorf("url %q: scheme %q is not allowed, only http, https and about:blank", raw, u.Scheme)
 	}
 }
 
