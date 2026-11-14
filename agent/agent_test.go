@@ -135,8 +135,8 @@ func TestRequestChecks(t *testing.T) {
 	}
 }
 
-// Whatever tools the caller asks for, the agent only ever gets Read inside
-// its working dir (Claude) or a read-only sandbox (Codex), and the caller's
+// Whatever tools the caller asks for, the agent only ever gets Read and Grep
+// inside its working dir (Claude) or a read-only sandbox (Codex), and the caller's
 // options are not modified.
 func TestLockDown(t *testing.T) {
 	callerClaude := &claude.RunOpts{AllowedTools: []string{"Bash", "Write"}, TempDir: "/tmp/dbg", MaxTurns: 3}
@@ -144,7 +144,7 @@ func TestLockDown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(got.ClaudeOpts.AllowedTools, []string{"Read(./**)"}) {
+	if !slices.Equal(got.ClaudeOpts.AllowedTools, []string{"Read(./**)", "Grep(./**)"}) {
 		t.Errorf("claude tools = %v", got.ClaudeOpts.AllowedTools)
 	}
 	if got.ClaudeOpts.TempDir != "/tmp/dbg" || got.ClaudeOpts.MaxTurns != 3 {
@@ -155,7 +155,7 @@ func TestLockDown(t *testing.T) {
 	}
 
 	got, err = lockDown(aclio.Request{Provider: aclio.Claude, Dir: "/abs"})
-	if err != nil || !slices.Equal(got.ClaudeOpts.AllowedTools, []string{"Read(./**)"}) {
+	if err != nil || !slices.Equal(got.ClaudeOpts.AllowedTools, []string{"Read(./**)", "Grep(./**)"}) {
 		t.Errorf("nil ClaudeOpts: %+v, %v", got.ClaudeOpts, err)
 	}
 

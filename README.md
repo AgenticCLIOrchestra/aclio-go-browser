@@ -107,7 +107,7 @@ turn, err := agent.Initial(agent.InitialRequest{
 
 - **The prompt is required** at this level; `DefaultInitialPrompt` and `DefaultSubsequentPrompt` are ours to pass in. `RenderInitial` / `RenderSubsequent` return the prompt text without running anything.
 - **Templates** may use any subset of the placeholders, which are exported as constants: `{task}` (required in the initial template), `{page_state}`, `{response_schema}`, `{examples}` and `{artifacts}` for the first turn; `{performed_actions}` and `{page_state}` after that. Any other `{snake_case}` token is an error, so a typo fails instead of reaching the model.
-- **The agent's tools are fixed, whatever the request asks for.** Claude gets only `Read(./**)`, the Read tool limited to its working directory. Codex runs in a read-only sandbox. Your `ClaudeOpts` / `CodexOpts` are copied, never modified.
+- **The agent's tools are fixed, whatever the request asks for.** Claude gets only `Read(./**)` and `Grep(./**)`, the Read and Grep tools limited to its working directory. Codex runs in a read-only sandbox. Your `ClaudeOpts` / `CodexOpts` are copied, never modified.
 - **Snapshot paths must be inside the agent's working directory.** They are shown to the agent relative to it, and a path outside it fails the turn up front, since the agent couldn't read it.
 - **Examples** shown to the agent are filtered with `preset.Check`, so it never sees an example it isn't allowed to follow. `DefaultExamples()` are ours; pass your own in `InitialRequest.Examples`.
 

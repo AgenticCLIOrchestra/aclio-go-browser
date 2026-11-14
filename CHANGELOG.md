@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-14
+
+### Changed
+- Claude's agent now gets the Grep tool as well as Read, both limited to its working directory (`Grep(./**)` alongside `Read(./**)`), so it can find what it needs in a large DOM snapshot before reading around it. As before, the agent's tools are fixed whatever the request asks for. `DefaultInitialPrompt` now tells the agent to grep a large DOM first, then read in chunks around the matches. Codex is unchanged (read-only sandbox)
+
 ## [0.1.3] - 2026-11-14
 
 ### Fixed
@@ -37,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.2.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.1.0...v0.1.1

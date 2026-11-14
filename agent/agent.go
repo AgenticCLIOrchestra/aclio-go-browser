@@ -16,8 +16,8 @@
 //	})
 //
 // The agent gets no direct access to anything but its own working directory:
-// Claude is allowed only the Read tool, limited to that directory, and Codex
-// runs in a read-only sandbox. Whatever else it does goes through the actions
+// Claude is allowed only the Read and Grep tools, limited to that directory,
+// and Codex runs in a read-only sandbox. Whatever else it does goes through the actions
 // its preset allows.
 package agent
 
@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	aclio "github.com/agenticcliorchestra/aclio-go"
@@ -61,9 +62,10 @@ const (
 	PlaceholderPerformedActions = "{performed_actions}" // the last batch, with outcomes
 )
 
-// claudeReadTool is the only tool Claude gets: Read, limited to its working
-// directory, where each turn's snapshot files are.
-const claudeReadTool = "Read(./**)"
+// claudeTools are the only tools Claude gets: Read and Grep, both limited to
+// its working directory, where each turn's snapshot files are. Grep lets it
+// find the part of a large DOM it needs before reading around it.
+var claudeTools = []string{"Read(./**)", "Grep(./**)"}
 
 // Response is what the agent answers each turn with.
 type Response struct {
@@ -196,7 +198,7 @@ func run(base aclio.Request, text, schema, sessionID string) (Turn, error) {
 }
 
 // lockDown returns base with the agent's tools fixed, whatever base asked
-// for: Claude may only Read inside its working directory, Codex runs in a
+// for: Claude may only Read and Grep inside its working directory, Codex runs in a
 // read-only sandbox. Every other provider extra is kept. The caller's
 // ClaudeOpts / CodexOpts are copied, never modified.
 func lockDown(base aclio.Request) (aclio.Request, error) {
@@ -209,7 +211,7 @@ func lockDown(base aclio.Request) (aclio.Request, error) {
 		if base.ClaudeOpts != nil {
 			c = *base.ClaudeOpts
 		}
-		c.AllowedTools = []string{claudeReadTool}
+		c.AllowedTools = slices.Clone(claudeTools)
 		base.ClaudeOpts = &c
 	case aclio.Codex:
 		c := codex.RunOpts{}
