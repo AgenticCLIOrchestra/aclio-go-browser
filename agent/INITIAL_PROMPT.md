@@ -7,8 +7,9 @@ The current page state:
 {page_state}
 
 Any file paths above are relative to your working directory; open them with the
-Read tool. A DOM (HTML) file can be very large: read it in chunks (using an
-offset and limit) around the parts you need rather than all at once. A focused
+Read tool. A DOM (HTML) file can be very large: find what you need with the Grep
+tool (e.g. a label, an id or a role), then read it in chunks (using an offset
+and limit) around the matches rather than all at once. A focused
 element, when given, is a screen-reader view of where keyboard focus is: `text`
 is what a screen reader would read, `labelledBy` / `describedBy` are the
 resolved texts of its aria-labelledby / aria-describedby, and for composite
