@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-11-14
+
+### Changed
+- Bumped `github.com/agenticcliorchestra/aclio-go` from v0.11.3 to v0.12.0. No API changes here, and the agent's log output is unchanged. aclio-go's new event handlers work through the existing `Request.Agent`: set `Agent.EventHandlerFactory` to filter or rewrite the agent's log lines. Each agent turn is a separate CLI run, so the factory is called once per turn, not once per task
+
 ## [0.1.1] - 2026-11-14
 
 ### Changed
@@ -27,5 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.1.2]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/releases/tag/v0.1.0
