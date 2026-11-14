@@ -1,5 +1,5 @@
-github.com/agenticcliorchestra/aclio-go v0.11.0 h1:havuoa2pABV/ZnCs038tvGYNnQpE1FANkNs+nIbqCvc=
-github.com/agenticcliorchestra/aclio-go v0.11.0/go.mod h1:X9zq8CJr5PkFnMzcSKM3eDwnd8wgsLnmMg46ZDi0Css=
+github.com/agenticcliorchestra/aclio-go v0.11.3 h1:vBBbxsYmyzhiEY49oDkfBw1nySqz8ioWhHrVcLAEcN4=
+github.com/agenticcliorchestra/aclio-go v0.11.3/go.mod h1:X9zq8CJr5PkFnMzcSKM3eDwnd8wgsLnmMg46ZDi0Css=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/deckarep/golang-set/v2 v2.8.0 h1:swm0rlPCmdWn9mESxKOjWk8hXSqoxOp+ZlfuyaAdFlQ=
