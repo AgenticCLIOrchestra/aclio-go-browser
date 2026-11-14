@@ -81,11 +81,11 @@ type Wait struct {
 	Milliseconds int `json:"milliseconds" description:"wait: how long to wait, in milliseconds"`
 }
 
-// GoTo navigates the active tab to URL: an absolute http(s) URL, a
-// root-relative path (/some/path) or a path relative to the current page
+// GoTo navigates the active tab to URL: an absolute http(s) URL, about:blank,
+// a root-relative path (/some/path) or a path relative to the current page
 // (../some/path).
 type GoTo struct {
-	URL string `json:"url" description:"goTo: absolute http(s) URL, root-relative path, or path relative to the current page"`
+	URL string `json:"url" description:"goTo: absolute http(s) URL, about:blank, root-relative path, or path relative to the current page"`
 }
 
 // TabOpen opens a new blank tab and makes it active.

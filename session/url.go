@@ -9,8 +9,8 @@ import (
 )
 
 // resolveGoTo resolves a goTo target against the current page URL and checks
-// the result. action.ValidateURL already limits raw to http(s) or relative
-// references; the resolved URL must be http(s) too, so a relative reference
+// the result. action.ValidateURL already limits raw to http(s), about:blank or
+// relative references; a resolved relative reference must be http(s), so it
 // can't inherit a non-web scheme from the current page (about:blank, file:,
 // …).
 func resolveGoTo(current, raw string) (string, error) {

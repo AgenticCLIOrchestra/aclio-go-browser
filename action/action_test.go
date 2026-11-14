@@ -226,12 +226,12 @@ func TestValidateRejects(t *testing.T) {
 }
 
 func TestValidateURL(t *testing.T) {
-	for _, ok := range []string{"https://example.com/a?b=c", "http://x", "/root", "../up", "page.html", "?q=1", "#frag", "//cdn.example.com/x"} {
+	for _, ok := range []string{"https://example.com/a?b=c", "http://x", "/root", "../up", "page.html", "?q=1", "#frag", "//cdn.example.com/x", "about:blank", "ABOUT:blank"} {
 		if err := ValidateURL(ok); err != nil {
 			t.Errorf("%q: %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"", "javascript:alert(1)", "JavaScript:alert(1)", " javascript:alert(1)", "java\tscript:alert(1)", "file:///etc/passwd", "data:text/html,hi", "chrome://settings", "about:blank"} {
+	for _, bad := range []string{"", "javascript:alert(1)", "JavaScript:alert(1)", " javascript:alert(1)", "java\tscript:alert(1)", "file:///etc/passwd", "data:text/html,hi", "chrome://settings", "about:config", "about:srcdoc", "about:Blank", "about:blank?x", "about:blank#x", "about://blank"} {
 		if err := ValidateURL(bad); err == nil {
 			t.Errorf("%q: want error", bad)
 		}
