@@ -10,6 +10,7 @@ import (
 
 	aclio "github.com/agenticcliorchestra/aclio-go"
 	"github.com/agenticcliorchestra/aclio-go-browser/action"
+	"github.com/agenticcliorchestra/aclio-go-browser/engine"
 	"github.com/agenticcliorchestra/aclio-go-browser/preset"
 	"github.com/agenticcliorchestra/aclio-go/claude"
 	"github.com/agenticcliorchestra/aclio-go/codex"
@@ -189,5 +190,32 @@ func TestDebugName(t *testing.T) {
 	}
 	if got := time.Date(2026, 11, 18, 9, 3, 1, 5e6, time.Local).Format(debugStampLayout); got != "20261118-090301.005" {
 		t.Errorf("stamp = %q", got)
+	}
+}
+
+// A preset that perceives the focused element (Blind) is refused on Firefox,
+// before anything touches the disk; other presets and Chromium are fine.
+func TestBlindRefusesFirefox(t *testing.T) {
+	if err := checkEngine(preset.Blind(), engine.Firefox); err == nil {
+		t.Error("Blind on Firefox should be refused")
+	}
+	for _, c := range []struct {
+		p preset.Preset
+		e engine.Browser
+	}{{preset.Blind(), engine.Chromium}, {preset.Default(), engine.Firefox}, {preset.Motor(), engine.Firefox}} {
+		if err := checkEngine(c.p, c.e); err != nil {
+			t.Errorf("checkEngine(%s, %s) = %v", c.p.Name, c.e, err)
+		}
+	}
+
+	req := validRequest()
+	req.Preset = ptr(preset.Blind())
+	wd := t.TempDir()
+	req.Options = Options{Browser: Firefox, WorkingDir: ptr(wd)}
+	if _, err := Run(req); err == nil || !strings.Contains(err.Error(), "Firefox") {
+		t.Errorf("Run(Blind, Firefox) = %v", err)
+	}
+	if es, _ := os.ReadDir(wd); len(es) != 0 {
+		t.Errorf("Run wrote %d entries before refusing", len(es))
 	}
 }
