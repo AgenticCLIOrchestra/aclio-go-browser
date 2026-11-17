@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/agenticcliorchestra/aclio-go-browser/action"
+	"github.com/agenticcliorchestra/aclio-go-browser/engine"
 	"github.com/agenticcliorchestra/aclio-go-browser/preset"
 )
 
@@ -97,5 +98,13 @@ func TestClosedBrowser(t *testing.T) {
 		if !got[0].Attempted || got[0].Succeeded || got[0].Reason == nil || got[1].Attempted {
 			t.Errorf("Perform on a closed browser = %+v", got)
 		}
+	}
+}
+
+// The focused element's roles come from Chromium's accessibility tree, so
+// Focused refuses Firefox before touching the page.
+func TestFocusedNeedsChromium(t *testing.T) {
+	if _, err := Focused(&Browser{engine: engine.Firefox}); err == nil || !strings.Contains(err.Error(), "Chromium") {
+		t.Errorf("Focused on Firefox = %v, want a Chromium error", err)
 	}
 }

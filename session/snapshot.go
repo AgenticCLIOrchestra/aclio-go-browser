@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/agenticcliorchestra/aclio-go-browser/engine"
 	"github.com/agenticcliorchestra/aclio-go-browser/preset"
 	"github.com/mxschmitt/playwright-go"
 	"github.com/yosssi/gohtml"
@@ -104,10 +105,15 @@ func writeDOM(b *Browser, path string) error {
 }
 
 // Focused returns a screen-reader view of the active tab's focused element,
-// or nil when nothing (or just the body) is focused.
+// or nil when nothing (or just the body) is focused. It needs Chromium: the
+// roles come from Chromium's own accessibility tree, the one a screen reader
+// is given, which Firefox doesn't expose.
 func Focused(b *Browser) (*preset.FocusedElement, error) {
 	if err := checkOpen(b); err != nil {
 		return nil, err
+	}
+	if b.engine != engine.Chromium {
+		return nil, fmt.Errorf("session: the focused element needs Chromium, not %s", b.engine)
 	}
 	raw, err := b.active.Evaluate(focusedElementJS)
 	if err != nil {
@@ -124,7 +130,98 @@ func Focused(b *Browser) (*preset.FocusedElement, error) {
 	if err := json.Unmarshal(data, &fe); err != nil {
 		return nil, fmt.Errorf("session: reading the focused element: %w", err)
 	}
+	if err := addRoles(b, &fe); err != nil {
+		return nil, fmt.Errorf("session: reading the focused element's role: %w", err)
+	}
 	return &fe, nil
+}
+
+// addRoles fills in the computed roles of the focused element and of its
+// active descendant from Chromium's accessibility tree: the explicit role
+// when valid, otherwise the implicit one ("generic" for a plain div). They
+// are read in a separate call from focusedElementJS, so a page that moves
+// focus in between could mismatch them; snapshots are taken once the page has
+// settled.
+func addRoles(b *Browser, fe *preset.FocusedElement) error {
+	s, err := b.context.NewCDPSession(b.active)
+	if err != nil {
+		return err
+	}
+	defer s.Detach()
+	if fe.Role, err = axRole(s, `document.activeElement`); err != nil {
+		return err
+	}
+	if ad := fe.ActiveDescendant; ad != nil && !ad.Missing {
+		if ad.Role, err = axRole(s, activeDescendantJS); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// activeDescendantJS finds the focused element's aria-activedescendant the way
+// focusedElementJS does: in the element's own tree first, then the document.
+const activeDescendantJS = `(() => {
+  const el = document.activeElement;
+  const id = el && el.getAttribute('aria-activedescendant');
+  if (!id) return null;
+  const scope = el.getRootNode && el.getRootNode().getElementById ? el.getRootNode() : document;
+  return scope.getElementById(id) || document.getElementById(id);
+})()`
+
+// axRole evaluates expr to an element and returns its role in Chromium's
+// accessibility tree, nil when expr gives no element or the node is ignored
+// (not in the tree a screen reader gets).
+func axRole(s playwright.CDPSession, expr string) (*string, error) {
+	var ev struct {
+		Result struct {
+			ObjectID string `json:"objectId"`
+		} `json:"result"`
+	}
+	if err := cdpSend(s, "Runtime.evaluate", map[string]any{"expression": expr}, &ev); err != nil {
+		return nil, err
+	}
+	if ev.Result.ObjectID == "" {
+		return nil, nil
+	}
+	var tree struct {
+		Nodes []struct {
+			Ignored bool `json:"ignored"`
+			Role    *struct {
+				Value string `json:"value"`
+			} `json:"role"`
+		} `json:"nodes"`
+	}
+	if err := cdpSend(s, "Accessibility.getPartialAXTree", map[string]any{
+		"objectId":       ev.Result.ObjectID,
+		"fetchRelatives": false,
+	}, &tree); err != nil {
+		return nil, err
+	}
+	if len(tree.Nodes) == 0 {
+		return nil, nil
+	}
+	n := tree.Nodes[0]
+	if n.Ignored || n.Role == nil || n.Role.Value == "" {
+		return nil, nil
+	}
+	return &n.Role.Value, nil
+}
+
+// cdpSend sends a CDP command and decodes its result into out.
+func cdpSend(s playwright.CDPSession, method string, params map[string]any, out any) error {
+	res, err := s.Send(method, params)
+	if err != nil {
+		return fmt.Errorf("%s: %w", method, err)
+	}
+	data, err := json.Marshal(res)
+	if err != nil {
+		return fmt.Errorf("%s: %w", method, err)
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("%s: %w", method, err)
+	}
+	return nil
 }
 
 // focusedElementJS reads document.activeElement the way a screen reader would
@@ -204,7 +301,6 @@ const focusedElementJS = `() => {
 
   const out = { tag: el.tagName.toLowerCase() };
   const setAttr = (k, n) => { const v = el.getAttribute(n); if (v !== null) out[k] = v; };
-  setAttr('role', 'role');
   setAttr('type', 'type');
   setAttr('title', 'title');
   setAttr('placeholder', 'placeholder');
@@ -240,7 +336,6 @@ const focusedElementJS = `() => {
       out.activeDescendant = { missing: true };
     } else {
       const a = { tag: ad.tagName.toLowerCase() };
-      const r = ad.getAttribute('role'); if (r !== null) a.role = r;
       const t = srText(ad); if (t) a.text = t;
       const alb = refText(ad, 'aria-labelledby'); if (alb !== null) a.labelledBy = alb;
       const adb = refText(ad, 'aria-describedby'); if (adb !== null) a.describedBy = adb;

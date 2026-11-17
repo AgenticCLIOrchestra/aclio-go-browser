@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-18
+
+### Changed
+- The focused element's `role` (and its active descendant's) is now the computed role, read from Chromium's own accessibility tree: the one a screen reader is given. It is the explicit `role` attribute when valid, otherwise the element's implicit role (a `<button>` is `button`, a radio input `radio`, a `<select>` `combobox`, a plain `<div>` `generic`). It used to be only the raw `role` attribute, so native elements had none. An invalid role token is skipped as browsers do (`role="bogus button"` is `button`), and a focusable `role="presentation"` is `generic`. `role` is omitted when the element is left out of the accessibility tree. Nothing else in the focused-element view changes
+- `session.Focused` now needs Chromium and returns an error on Firefox, since the roles come from Chromium's accessibility tree
+
 ## [0.6.0] - 2026-11-18
 
 ### Changed
@@ -67,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.7.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.3.0...v0.4.0

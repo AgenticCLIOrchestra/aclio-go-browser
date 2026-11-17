@@ -28,6 +28,12 @@ type Tab struct {
 // container's content is not reported, and the item aria-activedescendant
 // points at is in ActiveDescendant.
 //
+// Role is the computed role a screen reader is given, read from Chromium's
+// accessibility tree: the explicit role attribute when valid, otherwise the
+// element's implicit one (a <button> is "button", a radio input "radio", a
+// plain <div> "generic"). It is omitted when the element is left out of that
+// tree.
+//
 // The native states are read off the DOM properties, not the attributes, so
 // they reflect what the user did (a radio clicked after load is Checked).
 // Checked and Selected are set only on elements that have them (a checkbox or
@@ -35,7 +41,7 @@ type Tab struct {
 // flags are omitted when false.
 type FocusedElement struct {
 	Tag              string            `json:"tag"`                        // "button", "input", …
-	Role             *string           `json:"role,omitempty"`             // explicit role attribute
+	Role             *string           `json:"role,omitempty"`             // computed role, from Chromium's accessibility tree
 	Type             *string           `json:"type,omitempty"`             // input type
 	Title            *string           `json:"title,omitempty"`            // title attribute
 	Text             *string           `json:"text,omitempty"`             // screen-reader text content
@@ -58,8 +64,8 @@ type FocusedElement struct {
 
 // ActiveDescendant is the item a focused composite widget designates via
 // aria-activedescendant: what a screen reader announces while DOM focus stays
-// on the container. Missing is set when the id resolves to no element. The
-// native states follow the same rules as on FocusedElement.
+// on the container. Missing is set when the id resolves to no element. Role
+// and the native states follow the same rules as on FocusedElement.
 type ActiveDescendant struct {
 	Tag           string            `json:"tag,omitempty"`
 	Role          *string           `json:"role,omitempty"`
