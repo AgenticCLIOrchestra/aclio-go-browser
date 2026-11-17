@@ -93,6 +93,10 @@ func Run(req Request) (Result, error) {
 	if err := checkBrowserOptions(req.Options); err != nil {
 		return Result{}, err
 	}
+	e, _ := engine.Resolve(req.Options.Browser) // checked just above
+	if err := checkEngine(p, e); err != nil {
+		return Result{}, err
+	}
 
 	dirs, err := ResolveDirs(req.Options)
 	if err != nil {
@@ -129,6 +133,11 @@ func Loop(b *session.Browser, req Request, dirs Dirs) (Result, error) {
 	}
 	if dirs.Working == "" || !filepath.IsAbs(dirs.Working) {
 		return Result{Dirs: dirs}, fmt.Errorf("browser: dirs.Working %q must be an absolute path", dirs.Working)
+	}
+	if b != nil {
+		if err := checkEngine(p, session.Engine(b)); err != nil {
+			return Result{Dirs: dirs}, err
+		}
 	}
 	return loop(b, req, p, dirs)
 }
@@ -268,6 +277,16 @@ func checkRequest(req Request) (preset.Preset, error) {
 		return preset.Preset{}, fmt.Errorf("browser: %w", err)
 	}
 	return p, nil
+}
+
+// checkEngine refuses Firefox for a preset that perceives the focused element
+// (e.g. Blind): its screen-reader view is to come from Chromium's own
+// accessibility tree, which Firefox doesn't expose.
+func checkEngine(p preset.Preset, e engine.Browser) error {
+	if p.Perceive.Focused && e == engine.Firefox {
+		return fmt.Errorf("browser: preset %q perceives the focused element, which needs Chromium; Firefox is not supported", p.Name)
+	}
+	return nil
 }
 
 // checkBrowserOptions catches the option errors session.Open would report,

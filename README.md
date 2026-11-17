@@ -170,6 +170,8 @@ type Preset struct {
 | `Blind()`   | `type`, `press`, `wait`, tabs | none | focused element (screen-reader view), tabs |
 | `Motor()`   | `Blind`'s actions plus `goTo` | none | screenshot, DOM, tabs |
 
+**`Blind()` runs on Chromium only.** Any preset that perceives the focused element (`Blind()` and every copy of it, renamed or not) is refused on Firefox: its screen-reader view is to come from Chromium's own accessibility tree, which Firefox doesn't expose. `Run` refuses before creating any directory or launching the browser; `Loop` refuses before the first turn. `Default()`, `Full()` and `Motor()` run on either browser.
+
 Each built-in is a function that returns a fresh copy, so changing yours never affects anyone else's:
 
 ```go
@@ -205,7 +207,7 @@ if err := preset.Validate(p); err != nil { … }
 
 ```go
 type Options struct {
-    Browser      browser.Browser // browser.Chromium (default) or browser.Firefox
+    Browser      browser.Browser // browser.Chromium (default) or browser.Firefox (not with Blind)
     WorkingDir   *string         // nil: a new dir under the system temp dir
     ArtifactsDir *string         // nil: {WorkingDir}/artifacts
     UserDataDir  *string         // nil: anonymous session, no profile dir anywhere
