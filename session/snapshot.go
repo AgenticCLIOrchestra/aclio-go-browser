@@ -108,9 +108,11 @@ func Focused(b *Browser) (*preset.FocusedElement, error) {
 // focusedElementJS reads document.activeElement the way a screen reader would
 // announce it: text skips hidden subtrees and uses descendants' aria-label /
 // img alt; inline elements join without spaces; aria-labelledby and
-// aria-describedby resolve to the referenced text; composite widgets (grid,
-// listbox, menu, …) report their aria-activedescendant instead of their own
-// content. A field is included only when its source is present, so "" stays
+// aria-describedby resolve to the referenced text; <label>s (for= or
+// wrapping) and the enclosing fieldset's <legend> are read; native states
+// (checked, selected, disabled, …) come from the DOM properties; composite
+// widgets (grid, listbox, menu, …) report their aria-activedescendant instead
+// of their own content. A field is included only when its source is present, so "" stays
 // distinct from absent.
 const focusedElementJS = `() => {
   const el = document.activeElement;
@@ -128,9 +130,12 @@ const focusedElementJS = `() => {
     const d = window.getComputedStyle(n).display;
     return d === 'inline' || d === 'contents';
   };
-  const srText = (root) => {
+  // skip, when given, is left out of the text: a <label> wrapping the focused
+  // <select> must not read out every option.
+  const srText = (root, skip) => {
     const parts = [];
     const walk = (n, isRoot) => {
+      if (n === skip) return;
       if (n.nodeType === Node.TEXT_NODE) { parts.push(n.data); return; }
       if (n.nodeType !== Node.ELEMENT_NODE) return;
       if (!isRoot && isHidden(n)) return;
@@ -162,6 +167,18 @@ const focusedElementJS = `() => {
     for (const a of n.attributes) if (a.name.startsWith('aria-')) aria[a.name] = a.value;
     return Object.keys(aria).length ? aria : null;
   };
+  // Native states, from the DOM properties so they reflect user interaction.
+  // checked / selected only where the element has them (false is reported).
+  const addStates = (n, o) => {
+    if (n.tagName === 'INPUT' && (n.type === 'checkbox' || n.type === 'radio')) {
+      o.checked = n.checked;
+      if (n.indeterminate) o.indeterminate = true;
+    }
+    if (n.tagName === 'OPTION') o.selected = n.selected;
+    if (n.matches(':disabled')) o.disabled = true;
+    if (n.required === true) o.required = true;
+    if (n.readOnly === true) o.readOnly = true;
+  };
 
   const out = { tag: el.tagName.toLowerCase() };
   const setAttr = (k, n) => { const v = el.getAttribute(n); if (v !== null) out[k] = v; };
@@ -170,16 +187,27 @@ const focusedElementJS = `() => {
   setAttr('title', 'title');
   setAttr('placeholder', 'placeholder');
   if (el.value !== undefined && el.value !== null) out.value = String(el.value);
+  if (el.tagName === 'SELECT') {
+    out.selectedText = Array.from(el.selectedOptions).map((o) => o.label.trim()).join(', ').slice(0, MAX);
+  }
 
   const role = (el.getAttribute('role') || '').trim().toLowerCase();
-  if (!COMPOSITE.has(role)) {
+  // A <select>'s options are not its text: selectedText says what is chosen.
+  if (!COMPOSITE.has(role) && el.tagName !== 'SELECT') {
     const text = srText(el);
     if (text) out.text = text;
   }
+  if (el.labels && el.labels.length) {
+    out.label = Array.from(el.labels).map((l) => srText(l, el)).filter(Boolean).join(' ').slice(0, MAX);
+  }
+  const fieldset = el.parentElement && el.parentElement.closest('fieldset');
+  const legend = fieldset && Array.from(fieldset.children).find((c) => c.tagName === 'LEGEND');
+  if (legend) out.legend = srText(legend);
   const lb = refText(el, 'aria-labelledby');
   if (lb !== null) out.labelledBy = lb;
   const db = refText(el, 'aria-describedby');
   if (db !== null) out.describedBy = db;
+  addStates(el, out);
   const aria = ariaOf(el);
   if (aria) out.aria = aria;
 
@@ -194,6 +222,7 @@ const focusedElementJS = `() => {
       const t = srText(ad); if (t) a.text = t;
       const alb = refText(ad, 'aria-labelledby'); if (alb !== null) a.labelledBy = alb;
       const adb = refText(ad, 'aria-describedby'); if (adb !== null) a.describedBy = adb;
+      addStates(ad, a);
       const aa = ariaOf(ad); if (aa) a.aria = aa;
       out.activeDescendant = a;
     }

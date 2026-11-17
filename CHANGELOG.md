@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-17
+
+### Added
+- `preset.FocusedElement` reports native labelling and state: `Label` (the text of its `<label>`s, `for=` or wrapping), `Legend` (the nearest enclosing fieldset's `<legend>`), `SelectedText` (a `<select>`'s selected options) and `Checked`, `Indeterminate`, `Selected`, `Disabled`, `Required` and `ReadOnly`. `ActiveDescendant` gets the same states. States come from the live DOM properties, so they reflect what the user did. `Checked` and `Selected` are `*bool` and set only on checkboxes, radios and `<option>`s, where `false` means unchecked or unselected; the other flags are omitted when false. `DefaultInitialPrompt` explains the new fields to the agent
+
+### Fixed
+- The focused-element view (e.g. in the `Blind` preset) no longer shows a natively labelled control as unnamed and stateless: a radio with a `<label for>` and `checked` used to come back with no name and no checked state, because only text content, `aria-labelledby` and `aria-*` attributes were read
+- A focused `<select>` no longer reports every option as its `text`; what is chosen is in `SelectedText`
+
 ## [0.3.0] - 2026-11-14
 
 ### Changed
@@ -47,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.4.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.1.2...v0.1.3
