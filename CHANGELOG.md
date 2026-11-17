@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-11-18
+
+### Added
+- When the preset doesn't perceive the DOM (e.g. `Blind`), `Run` and `Loop` still save the DOM at each snapshot, before the first turn and after every turn, to the agent's debug dir, out of the agent's reach. The file is named `{stamp}-{name}-dom.html` like aclio-go's own debug dumps (local time, millisecond precision, the normalised run name), so it sorts among them in order, and is formatted exactly like a perceived DOM snapshot. The debug dir is `{WorkingDir}/debug` unless you set `ClaudeOpts.TempDir` / `CodexOpts.TempDir`. Writing it is best-effort, like the CLI's dumps: a failure never fails the run. Presets that perceive the DOM are unchanged
+- `session.WriteDOM`, which writes the active tab's DOM to a path, formatted exactly as `Snapshot` formats it
+
 ## [0.4.0] - 2026-11-17
 
 ### Added
@@ -56,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.5.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.1.3...v0.2.0

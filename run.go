@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	aclio "github.com/agenticcliorchestra/aclio-go"
 	"github.com/agenticcliorchestra/aclio-go-browser/action"
@@ -145,7 +146,7 @@ func loop(b *session.Browser, req Request, p preset.Preset, dirs Dirs) (Result, 
 		maxTurns = DefaultMaxTurns
 	}
 
-	st, err := session.Snapshot(b, p.Perceive, turnsDir)
+	st, err := snapshot(b, p, turnsDir, base)
 	if err != nil {
 		return res, err
 	}
@@ -166,7 +167,7 @@ func loop(b *session.Browser, req Request, p preset.Preset, dirs Dirs) (Result, 
 			return res, fmt.Errorf("browser: %w (%d)", ErrTurnLimit, maxTurns)
 		}
 		performed := Perform(b, p, turn.Response.Actions)
-		if st, err = session.Snapshot(b, p.Perceive, turnsDir); err != nil {
+		if st, err = snapshot(b, p, turnsDir, base); err != nil {
 			return res, err
 		}
 		turn, err = agent.Subsequent(agent.SubsequentRequest{
@@ -290,6 +291,58 @@ func sessionOpts(o Options, dirs Dirs) session.Opts {
 		VideoDir:     filepath.Join(dirs.Working, videoSubdir),
 		ArtifactsDir: dirs.Artifacts,
 	}
+}
+
+// debugStampLayout matches the names of aclio-go's debug dumps ({stamp}-{name}-
+// {kind}, local time, millisecond precision), so a DOM dump sorts among them
+// in chronological order.
+const debugStampLayout = "20060102-150405.000"
+
+// snapshot takes the turn's snapshot. When the preset doesn't perceive the DOM
+// (e.g. Blind), the DOM is still saved, formatted the same way, to the debug
+// dir as {stamp}-{name}-dom.html, out of the agent's reach. That copy is
+// best-effort, like the CLI's own debug dumps: failing to write it never fails
+// the run.
+func snapshot(b *session.Browser, p preset.Preset, turnsDir string, r aclio.Request) (preset.State, error) {
+	st, err := session.Snapshot(b, p.Perceive, turnsDir)
+	if err != nil || p.Perceive.DOM {
+		return st, err
+	}
+	if dir := debugDir(r); dir != "" {
+		name := time.Now().Format(debugStampLayout) + "-" + debugName(r.Name) + "-dom.html"
+		_ = session.WriteDOM(b, filepath.Join(dir, name))
+	}
+	return st, nil
+}
+
+// debugDir is where r's CLI writes its debug dumps, "" when nowhere.
+func debugDir(r aclio.Request) string {
+	switch {
+	case r.Provider == aclio.Claude && r.ClaudeOpts != nil:
+		return r.ClaudeOpts.TempDir
+	case r.Provider == aclio.Codex && r.CodexOpts != nil:
+		return r.CodexOpts.TempDir
+	}
+	return ""
+}
+
+// debugName normalises a run name for a dump file name the way aclio-go does
+// for its own dumps: lowercased, anything outside [a-z0-9_-] mapped to '-',
+// empty as "unnamed".
+func debugName(name string) string {
+	if name == "" {
+		return "unnamed"
+	}
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + ('a' - 'A')
+		default:
+			return '-'
+		}
+	}, name)
 }
 
 // agentRequest returns the caller's agent request with the agent's working

@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	aclio "github.com/agenticcliorchestra/aclio-go"
 	"github.com/agenticcliorchestra/aclio-go-browser/action"
 	"github.com/agenticcliorchestra/aclio-go-browser/preset"
 	"github.com/agenticcliorchestra/aclio-go/claude"
+	"github.com/agenticcliorchestra/aclio-go/codex"
 )
 
 func validRequest() Request {
@@ -157,5 +159,35 @@ func TestErrTurnLimitIsMatchable(t *testing.T) {
 	err := errors.Join(errors.New("x"), ErrTurnLimit)
 	if !errors.Is(err, ErrTurnLimit) {
 		t.Error("ErrTurnLimit not matchable")
+	}
+}
+
+func TestDebugDir(t *testing.T) {
+	cases := []struct {
+		r    aclio.Request
+		want string
+	}{
+		{aclio.Request{Provider: aclio.Claude, ClaudeOpts: &claude.RunOpts{TempDir: "/w/debug"}}, "/w/debug"},
+		{aclio.Request{Provider: aclio.Codex, CodexOpts: &codex.RunOpts{TempDir: "/own"}}, "/own"},
+		{aclio.Request{Provider: aclio.Claude}, ""},
+		{aclio.Request{Provider: aclio.Claude, CodexOpts: &codex.RunOpts{TempDir: "/x"}}, ""},
+	}
+	for _, c := range cases {
+		if got := debugDir(c.r); got != c.want {
+			t.Errorf("debugDir(%+v) = %q, want %q", c.r, got, c.want)
+		}
+	}
+}
+
+// The DOM dump's name sorts among aclio-go's dumps: same stamp layout, same
+// name normalisation.
+func TestDebugName(t *testing.T) {
+	for in, want := range map[string]string{"": "unnamed", "browser": "browser", "My Run/1": "my-run-1", "a_b-C": "a_b-c"} {
+		if got := debugName(in); got != want {
+			t.Errorf("debugName(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := time.Date(2026, 11, 18, 9, 3, 1, 5e6, time.Local).Format(debugStampLayout); got != "20261118-090301.005" {
+		t.Errorf("stamp = %q", got)
 	}
 }

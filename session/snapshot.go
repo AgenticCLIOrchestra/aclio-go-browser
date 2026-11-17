@@ -54,12 +54,8 @@ func Snapshot(b *Browser, perceive preset.Perception, dir string) (preset.State,
 		}
 		if perceive.DOM {
 			st.DOMPath = base + ".html"
-			dom, err := b.active.Content()
-			if err != nil {
-				return preset.State{}, fmt.Errorf("session: capturing DOM: %w", err)
-			}
-			if err := os.WriteFile(st.DOMPath, []byte(formatDOM(dom)), 0o644); err != nil {
-				return preset.State{}, fmt.Errorf("session: writing DOM: %w", err)
+			if err := writeDOM(b, st.DOMPath); err != nil {
+				return preset.State{}, err
 			}
 		}
 	}
@@ -79,6 +75,32 @@ func Snapshot(b *Browser, perceive preset.Perception, dir string) (preset.State,
 		st.Tabs = tabs
 	}
 	return st, nil
+}
+
+// WriteDOM writes the active tab's DOM to path, formatted exactly as Snapshot
+// formats it, creating path's directory if needed. It is for keeping a DOM
+// the agent doesn't perceive (e.g. a debug copy for the Blind preset).
+// WriteDOM never changes the page.
+func WriteDOM(b *Browser, path string) error {
+	if err := checkOpen(b); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("session: creating DOM dir: %w", err)
+	}
+	return writeDOM(b, path)
+}
+
+// writeDOM captures the active tab's DOM and writes it, formatted, to path.
+func writeDOM(b *Browser, path string) error {
+	dom, err := b.active.Content()
+	if err != nil {
+		return fmt.Errorf("session: capturing DOM: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(formatDOM(dom)), 0o644); err != nil {
+		return fmt.Errorf("session: writing DOM: %w", err)
+	}
+	return nil
 }
 
 // Focused returns a screen-reader view of the active tab's focused element,
