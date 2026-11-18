@@ -465,11 +465,10 @@ func cdpSend(s playwright.CDPSession, method string, params map[string]any, out 
 // (the role, name, value, states and properties come from there, see addAX)
 // off document.activeElement: text skips hidden subtrees and uses
 // descendants' aria-label / img alt; inline elements join without spaces;
-// aria-describedby resolves to the referenced text; the enclosing fieldset's
-// <legend> is read; required stands in for the tree's when it leaves it out;
-// only the aria-* attributes no other field covers are kept; composite
-// widgets (grid, listbox, menu, …) report their aria-activedescendant instead
-// of their own content. A field is included only when its source is present,
+// aria-describedby resolves to the referenced text; required stands in for
+// the tree's when it leaves it out; only the aria-* attributes no other field
+// covers are kept; composite widgets (grid, listbox, menu, …) report their
+// aria-activedescendant instead of their own content. A field is included only when its source is present,
 // so "" stays distinct from absent.
 const focusedElementJS = `() => {
   const el = document.activeElement;
@@ -549,9 +548,6 @@ const focusedElementJS = `() => {
     const text = srText(el);
     if (text) out.text = text;
   }
-  const fieldset = el.parentElement && el.parentElement.closest('fieldset');
-  const legend = fieldset && Array.from(fieldset.children).find((c) => c.tagName === 'LEGEND');
-  if (legend) out.legend = srText(legend);
   const db = refText(el, 'aria-describedby');
   if (db !== null) out.describedBy = db;
   // Chromium's accessibility tree leaves required out for some controls (e.g.

@@ -22,10 +22,10 @@ type Tab struct {
 //
 // It reports what a screen reader would announce rather than raw DOM content:
 // Text skips aria-hidden / hidden subtrees and uses descendants' aria-label;
-// aria-describedby resolves to the referenced text; the enclosing fieldset's
-// <legend> is in Legend; for composite widgets (grid, listbox, menu, …) the
-// container's content is not reported, and the item aria-activedescendant
-// points at is in ActiveDescendant.
+// aria-describedby resolves to the referenced text; for composite widgets
+// (grid, listbox, menu, …) the container's content is not reported, and the
+// item aria-activedescendant points at is in ActiveDescendant. A fieldset's
+// <legend> shows up in Context, as the group it names.
 //
 // Role is the computed role a screen reader is given, read from Chromium's
 // accessibility tree: the explicit role attribute when valid, otherwise the
@@ -71,7 +71,6 @@ type FocusedElement struct {
 	Text             *string           `json:"text,omitempty"`         // screen-reader text content
 	Value            *string           `json:"value,omitempty"`        // value, from Chromium's accessibility tree
 	SelectedText     *string           `json:"selectedText,omitempty"` // a list-style <select>'s selected options, ", "-joined
-	Legend           *string           `json:"legend,omitempty"`       // legend of the nearest enclosing <fieldset>
 	DescribedBy      *string           `json:"describedBy,omitempty"`  // text of the aria-describedby targets
 	Context          []ContextItem     `json:"context,omitempty"`      // ancestors a screen reader may announce, outermost first
 	AXState                            // states and properties, from Chromium's accessibility tree
