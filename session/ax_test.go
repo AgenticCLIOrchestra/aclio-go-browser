@@ -164,3 +164,21 @@ func TestAXContext(t *testing.T) {
 		t.Errorf("loop context = %+v", got)
 	}
 }
+
+// The description is kept when Chromium has one and left nil when it has
+// none or an empty one.
+func TestAXFromNodeDescription(t *testing.T) {
+	for raw, want := range map[string]*string{
+		`{"description":{"type":"computedString","value":"Must be 8 chars"}}`: ptr("Must be 8 chars"),
+		`{"description":{"type":"computedString","value":""}}`:                nil,
+		`{"role":{"value":"button"}}`:                                         nil,
+	} {
+		var n cdpAXNode
+		if err := json.Unmarshal([]byte(raw), &n); err != nil {
+			t.Fatal(err)
+		}
+		if got := axFromNode(n).Description; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: description = %v, want %v", raw, got, want)
+		}
+	}
+}

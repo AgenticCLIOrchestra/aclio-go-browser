@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-11-18
+
+### Changed
+- `preset.FocusedElement.DescribedBy` and `preset.ActiveDescendant.DescribedBy` are now `Description` (`description` in JSON), the accessible description from Chromium's own accessibility tree, the one a screen reader reads after the rest. It is the text of the `aria-describedby` targets (even hidden ones), else `aria-description`, else a `title` the name didn't already use, so a button with text and `title="Saves the draft"` now has that description, and `aria-description` is no longer ignored. It used to be worked out by our own JS from `aria-describedby` only. `aria-description` is gone from `Aria`. `DefaultInitialPrompt` explains `description` to the agent
+
 ## [0.14.0] - 2026-11-18
 
 ### Removed
@@ -128,6 +133,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.15.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.11.0...v0.12.0

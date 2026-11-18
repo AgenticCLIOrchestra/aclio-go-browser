@@ -138,8 +138,8 @@ func Focused(b *Browser) (*preset.FocusedElement, error) {
 	return &fe, nil
 }
 
-// addAX fills in the role, the accessible name and its sources, the value and
-// the states and properties of the focused element and of its active
+// addAX fills in the role, the accessible name and its sources, the value, the
+// description and the states and properties of the focused element and of its active
 // descendant, and the focused element's context (its announced ancestors),
 // from Chromium's accessibility tree. An element the tree ignores
 // is reduced to that fact and its reasons.
@@ -164,7 +164,7 @@ func addAX(b *Browser, fe *preset.FocusedElement) error {
 	// The DOM's required (see focusedElementJS) stands in when the tree leaves
 	// it out, as it does for a required checkbox.
 	domRequired := fe.Required
-	fe.Role, fe.Name, fe.NameSources, fe.Value, fe.AXState = ax.Role, ax.Name, ax.NameSources, ax.Value, ax.State
+	fe.Role, fe.Name, fe.NameSources, fe.Value, fe.Description, fe.AXState = ax.Role, ax.Name, ax.NameSources, ax.Value, ax.Description, ax.State
 	fe.Required = fe.Required || domRequired
 	fe.Context = ax.Context
 	if ad := fe.ActiveDescendant; ad != nil && !ad.Missing {
@@ -175,7 +175,7 @@ func addAX(b *Browser, fe *preset.FocusedElement) error {
 			*ad = preset.ActiveDescendant{AXState: ax.State}
 			return nil
 		}
-		ad.Role, ad.Name, ad.NameSources, ad.Value, ad.AXState = ax.Role, ax.Name, ax.NameSources, ax.Value, ax.State
+		ad.Role, ad.Name, ad.NameSources, ad.Value, ad.Description, ad.AXState = ax.Role, ax.Name, ax.NameSources, ax.Value, ax.Description, ax.State
 	}
 	return nil
 }
@@ -217,6 +217,9 @@ type cdpAXNode struct {
 	Value *struct {
 		Value any `json:"value"` // a string, or a number for e.g. a slider
 	} `json:"value"`
+	Description *struct {
+		Value string `json:"value"`
+	} `json:"description"`
 	Properties []struct {
 		Name  string `json:"name"`
 		Value struct {
@@ -233,12 +236,13 @@ type axInfo struct {
 	Name        *string
 	NameSources []preset.NameSource
 	Value       *string
+	Description *string
 	State       preset.AXState
 	Context     []preset.ContextItem
 }
 
-// axFromNode picks the role, name, name sources, value and states out of n.
-// Only sources that had a value are kept, once each, in Chromium's
+// axFromNode picks the role, name, name sources, value, description and states
+// out of n. Only sources that had a value are kept, once each, in Chromium's
 // (precedence) order. A numeric value (a slider, a spinbutton) is written out
 // plainly.
 func axFromNode(n cdpAXNode) axInfo {
@@ -261,6 +265,9 @@ func axFromNode(n cdpAXNode) axInfo {
 			s := strconv.FormatFloat(v, 'f', -1, 64)
 			ax.Value = &s
 		}
+	}
+	if n.Description != nil && n.Description.Value != "" {
+		ax.Description = &n.Description.Value
 	}
 	ax.State = axState(n)
 	if n.Name == nil {
@@ -465,8 +472,7 @@ func cdpSend(s playwright.CDPSession, method string, params map[string]any, out 
 // (the role, name, value, states and properties come from there, see addAX)
 // off document.activeElement: text skips hidden subtrees and uses
 // descendants' aria-label / img alt; inline elements join without spaces;
-// aria-describedby resolves to the referenced text; required stands in for
-// the tree's when it leaves it out; only the aria-* attributes no other field
+// required stands in for the tree's when it leaves it out; only the aria-* attributes no other field
 // covers are kept; composite widgets (grid, listbox, menu, …) report their
 // aria-activedescendant instead of their own content. A field is included only when its source is present,
 // so "" stays distinct from absent.
@@ -509,16 +515,10 @@ const focusedElementJS = `() => {
 
   const scope = el.getRootNode && el.getRootNode().getElementById ? el.getRootNode() : document;
   const byId = (id) => scope.getElementById(id) || document.getElementById(id);
-  const refText = (n, attr) => {
-    const ids = (n.getAttribute(attr) || '').trim();
-    if (!ids) return null;
-    const texts = ids.split(/\s+/).map((id) => { const t = byId(id); return t ? srText(t) : ''; }).filter(Boolean);
-    return texts.length ? texts.join(' ').slice(0, MAX) : '';
-  };
   // aria-* attributes another field already covers: the name and its sources,
   // the value, the states and properties from the accessibility tree (incl.
   // ignored, which is what aria-hidden does when it takes effect),
-  // describedBy and activeDescendant. The rest (aria-current, aria-valuetext,
+  // the description and activeDescendant. The rest (aria-current, aria-valuetext,
   // aria-setsize, aria-controls, …) the tree doesn't report, so they stay.
   const COVERED = new Set([
     'aria-label', 'aria-labelledby', 'aria-describedby', 'aria-activedescendant',
@@ -526,7 +526,7 @@ const focusedElementJS = `() => {
     'aria-disabled', 'aria-readonly', 'aria-required', 'aria-invalid', 'aria-level',
     'aria-haspopup', 'aria-multiselectable', 'aria-orientation', 'aria-valuemin',
     'aria-valuemax', 'aria-autocomplete', 'aria-keyshortcuts', 'aria-roledescription',
-    'aria-modal', 'aria-hidden',
+    'aria-modal', 'aria-hidden', 'aria-description',
   ]);
   const ariaOf = (n) => {
     const aria = {};
@@ -548,8 +548,6 @@ const focusedElementJS = `() => {
     const text = srText(el);
     if (text) out.text = text;
   }
-  const db = refText(el, 'aria-describedby');
-  if (db !== null) out.describedBy = db;
   // Chromium's accessibility tree leaves required out for some controls (e.g.
   // a required checkbox); this stands in for it then (see addAX).
   if (el.required === true || el.getAttribute('aria-required') === 'true') out.required = true;
@@ -564,7 +562,6 @@ const focusedElementJS = `() => {
     } else {
       const a = {};
       const t = srText(ad); if (t) a.text = t;
-      const adb = refText(ad, 'aria-describedby'); if (adb !== null) a.describedBy = adb;
       const aa = ariaOf(ad); if (aa) a.aria = aa;
       out.activeDescendant = a;
     }
