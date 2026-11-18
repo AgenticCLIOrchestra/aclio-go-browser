@@ -41,6 +41,13 @@ type Tab struct {
 // what it outranked. Both are omitted when the element is left out of the
 // accessibility tree.
 //
+// Value is the value a screen reader announces, from Chromium's accessibility
+// tree: the text typed into a field (masked for a password), a drop-down
+// <select>'s selected text, a slider's or spinbutton's number (written out,
+// e.g. "7"). It is omitted when the element has none: an empty field, a
+// checkbox, a radio, a button, a link. A list-style <select> (multiple, or
+// size > 1) has no value; its selected options are in SelectedText.
+//
 // The native states are read off the DOM properties, not the attributes, so
 // they reflect what the user did (a radio clicked after load is Checked).
 // Checked and Selected are set only on elements that have them (a checkbox or
@@ -51,8 +58,8 @@ type FocusedElement struct {
 	Name             *string           `json:"name,omitempty"`             // accessible name, from Chromium's accessibility tree; "" when none
 	NameSources      []NameSource      `json:"nameSources,omitempty"`      // the sources that had a value, in precedence order
 	Text             *string           `json:"text,omitempty"`             // screen-reader text content
-	Value            *string           `json:"value,omitempty"`            // current value (inputs)
-	SelectedText     *string           `json:"selectedText,omitempty"`     // text of a <select>'s selected options, ", "-joined
+	Value            *string           `json:"value,omitempty"`            // value, from Chromium's accessibility tree
+	SelectedText     *string           `json:"selectedText,omitempty"`     // a list-style <select>'s selected options, ", "-joined
 	Legend           *string           `json:"legend,omitempty"`           // legend of the nearest enclosing <fieldset>
 	DescribedBy      *string           `json:"describedBy,omitempty"`      // text of the aria-describedby targets
 	Checked          *bool             `json:"checked,omitempty"`          // checkbox / radio only
@@ -81,12 +88,13 @@ type NameSource struct {
 // ActiveDescendant is the item a focused composite widget designates via
 // aria-activedescendant: what a screen reader announces while DOM focus stays
 // on the container. Missing is set when the id resolves to no element. Role,
-// Name, NameSources and the native states follow the same rules as on
+// Name, NameSources, Value and the native states follow the same rules as on
 // FocusedElement.
 type ActiveDescendant struct {
 	Role          *string           `json:"role,omitempty"`
 	Name          *string           `json:"name,omitempty"`
 	NameSources   []NameSource      `json:"nameSources,omitempty"`
+	Value         *string           `json:"value,omitempty"`
 	Text          *string           `json:"text,omitempty"`
 	DescribedBy   *string           `json:"describedBy,omitempty"`
 	Checked       *bool             `json:"checked,omitempty"`

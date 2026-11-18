@@ -54,3 +54,30 @@ func TestAXFromNode(t *testing.T) {
 		t.Errorf("ignored = %+v", ax)
 	}
 }
+
+// A string value is kept as is, a number (slider, spinbutton) written out
+// plainly, and no value stays nil.
+func TestAXFromNodeValue(t *testing.T) {
+	for raw, want := range map[string]string{
+		`{"value":{"type":"string","value":"typed"}}`: "typed",
+		`{"value":{"type":"number","value":7}}`:       "7",
+		`{"value":{"type":"number","value":0.25}}`:    "0.25",
+		`{"value":{"type":"number","value":1500000}}`: "1500000",
+		`{"value":{"type":"string","value":""}}`:      "",
+	} {
+		var n cdpAXNode
+		if err := json.Unmarshal([]byte(raw), &n); err != nil {
+			t.Fatal(err)
+		}
+		if ax := axFromNode(n); ax.Value == nil || *ax.Value != want {
+			t.Errorf("%s: value = %v, want %q", raw, ax.Value, want)
+		}
+	}
+	var n cdpAXNode
+	if err := json.Unmarshal([]byte(`{"role":{"value":"checkbox"}}`), &n); err != nil {
+		t.Fatal(err)
+	}
+	if ax := axFromNode(n); ax.Value != nil {
+		t.Errorf("no value = %q, want nil", *ax.Value)
+	}
+}
