@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-11-18
+
+### Removed
+- `preset.FocusedElement.Tag`, `preset.FocusedElement.Type` and `preset.ActiveDescendant.Tag`, and the `tag` / `type` fields of the focused-element view (e.g. in the `Blind` preset). A screen reader is never given an element's tag name or input type, only its role, which `Role` now carries. Some native elements that used to be told apart by tag or type now look the same, as they do to a screen reader: every text-like input is `textbox`, for example. On blind runs the full DOM is still saved to the debug dir
+
 ## [0.7.0] - 2026-11-18
 
 ### Changed
@@ -73,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.8.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.4.0...v0.5.0

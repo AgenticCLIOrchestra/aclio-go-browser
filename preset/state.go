@@ -40,9 +40,7 @@ type Tab struct {
 // radio, an <option>), where false means unchecked / unselected; the other
 // flags are omitted when false.
 type FocusedElement struct {
-	Tag              string            `json:"tag"`                        // "button", "input", …
 	Role             *string           `json:"role,omitempty"`             // computed role, from Chromium's accessibility tree
-	Type             *string           `json:"type,omitempty"`             // input type
 	Title            *string           `json:"title,omitempty"`            // title attribute
 	Text             *string           `json:"text,omitempty"`             // screen-reader text content
 	Value            *string           `json:"value,omitempty"`            // current value (inputs)
@@ -67,7 +65,6 @@ type FocusedElement struct {
 // on the container. Missing is set when the id resolves to no element. Role
 // and the native states follow the same rules as on FocusedElement.
 type ActiveDescendant struct {
-	Tag           string            `json:"tag,omitempty"`
 	Role          *string           `json:"role,omitempty"`
 	Text          *string           `json:"text,omitempty"`
 	LabelledBy    *string           `json:"labelledBy,omitempty"`

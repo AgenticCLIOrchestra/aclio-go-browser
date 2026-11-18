@@ -170,7 +170,7 @@ type Preset struct {
 | `Blind()`   | `type`, `press`, `wait`, tabs | none | focused element (screen-reader view), tabs |
 | `Motor()`   | `Blind`'s actions plus `goTo` | none | screenshot, DOM, tabs |
 
-**`Blind()` runs on Chromium only.** Any preset that perceives the focused element (`Blind()` and every copy of it, renamed or not) is refused on Firefox: its screen-reader view is to come from Chromium's own accessibility tree, which Firefox doesn't expose. `Run` refuses before creating any directory or launching the browser; `Loop` refuses before the first turn. `Default()`, `Full()` and `Motor()` run on either browser.
+**`Blind()` runs on Chromium only.** Any preset that perceives the focused element (`Blind()` and every copy of it, renamed or not) is refused on Firefox: its screen-reader view comes partly from Chromium's own accessibility tree (the computed `role`), which Firefox doesn't expose. `Run` refuses before creating any directory or launching the browser; `Loop` refuses before the first turn. `Default()`, `Full()` and `Motor()` run on either browser.
 
 Each built-in is a function that returns a fresh copy, so changing yours never affects anyone else's:
 

@@ -142,7 +142,7 @@ func TestDescribe(t *testing.T) {
 		t.Errorf("blind describe = %q", blind)
 	}
 
-	s.Focused = &FocusedElement{Tag: "button", Text: ptr("Save")}
+	s.Focused = &FocusedElement{Role: ptr("button"), Text: ptr("Save")}
 	if got := DescribeFocused(s); !strings.Contains(got, `"text":"Save"`) {
 		t.Errorf("DescribeFocused = %q", got)
 	}

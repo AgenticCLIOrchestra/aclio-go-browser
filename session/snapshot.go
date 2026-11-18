@@ -299,9 +299,8 @@ const focusedElementJS = `() => {
     if (n.readOnly === true) o.readOnly = true;
   };
 
-  const out = { tag: el.tagName.toLowerCase() };
+  const out = {};
   const setAttr = (k, n) => { const v = el.getAttribute(n); if (v !== null) out[k] = v; };
-  setAttr('type', 'type');
   setAttr('title', 'title');
   setAttr('placeholder', 'placeholder');
   if (el.value !== undefined && el.value !== null) out.value = String(el.value);
@@ -335,7 +334,7 @@ const focusedElementJS = `() => {
     if (!ad) {
       out.activeDescendant = { missing: true };
     } else {
-      const a = { tag: ad.tagName.toLowerCase() };
+      const a = {};
       const t = srText(ad); if (t) a.text = t;
       const alb = refText(ad, 'aria-labelledby'); if (alb !== null) a.labelledBy = alb;
       const adb = refText(ad, 'aria-describedby'); if (adb !== null) a.describedBy = adb;
