@@ -139,7 +139,8 @@ func Focused(b *Browser) (*preset.FocusedElement, error) {
 
 // addAX fills in the role, the accessible name and its sources, the value and
 // the states and properties of the focused element and of its active
-// descendant, from Chromium's accessibility tree.
+// descendant, from Chromium's accessibility tree. An element the tree ignores
+// is reduced to that fact and its reasons.
 // They are read in a separate call from focusedElementJS, so a page that moves
 // focus in between could mismatch them; snapshots are taken once the page has
 // settled.
@@ -153,6 +154,11 @@ func addAX(b *Browser, fe *preset.FocusedElement) error {
 	if err != nil {
 		return err
 	}
+	if ax.State.Ignored {
+		// A screen reader gets nothing for it, so nothing else is reported.
+		*fe = preset.FocusedElement{AXState: ax.State}
+		return nil
+	}
 	// The DOM's required (see focusedElementJS) stands in when the tree leaves
 	// it out, as it does for a required checkbox.
 	domRequired := fe.Required
@@ -161,6 +167,10 @@ func addAX(b *Browser, fe *preset.FocusedElement) error {
 	if ad := fe.ActiveDescendant; ad != nil && !ad.Missing {
 		if ax, err = axNode(s, activeDescendantJS); err != nil {
 			return err
+		}
+		if ax.State.Ignored {
+			*ad = preset.ActiveDescendant{AXState: ax.State}
+			return nil
 		}
 		ad.Role, ad.Name, ad.NameSources, ad.Value, ad.AXState = ax.Role, ax.Name, ax.NameSources, ax.Value, ax.State
 	}
@@ -179,8 +189,11 @@ const activeDescendantJS = `(() => {
 
 // cdpAXNode is the part of a CDP Accessibility.AXNode we read.
 type cdpAXNode struct {
-	Ignored bool `json:"ignored"`
-	Role    *struct {
+	Ignored        bool `json:"ignored"`
+	IgnoredReasons []struct {
+		Name string `json:"name"`
+	} `json:"ignoredReasons"`
+	Role *struct {
 		Value string `json:"value"`
 	} `json:"role"`
 	Name *struct {
@@ -207,7 +220,8 @@ type cdpAXNode struct {
 }
 
 // axInfo is what we take from an accessibility node. The zero value means no
-// node, or one left out of the tree a screen reader gets.
+// node; one left out of the tree a screen reader gets has only State.Ignored
+// and State.IgnoredReasons set.
 type axInfo struct {
 	Role        *string
 	Name        *string
@@ -222,7 +236,11 @@ type axInfo struct {
 // plainly.
 func axFromNode(n cdpAXNode) axInfo {
 	if n.Ignored {
-		return axInfo{}
+		st := preset.AXState{Ignored: true}
+		for _, r := range n.IgnoredReasons {
+			st.IgnoredReasons = append(st.IgnoredReasons, r.Name)
+		}
+		return axInfo{State: st}
 	}
 	var ax axInfo
 	if n.Role != nil && n.Role.Value != "" {
@@ -449,7 +467,8 @@ const focusedElementJS = `() => {
     return texts.length ? texts.join(' ').slice(0, MAX) : '';
   };
   // aria-* attributes another field already covers: the name and its sources,
-  // the value, the states and properties from the accessibility tree,
+  // the value, the states and properties from the accessibility tree (incl.
+  // ignored, which is what aria-hidden does when it takes effect),
   // describedBy and activeDescendant. The rest (aria-current, aria-valuetext,
   // aria-setsize, aria-controls, …) the tree doesn't report, so they stay.
   const COVERED = new Set([
@@ -458,7 +477,7 @@ const focusedElementJS = `() => {
     'aria-disabled', 'aria-readonly', 'aria-required', 'aria-invalid', 'aria-level',
     'aria-haspopup', 'aria-multiselectable', 'aria-orientation', 'aria-valuemin',
     'aria-valuemax', 'aria-autocomplete', 'aria-keyshortcuts', 'aria-roledescription',
-    'aria-modal',
+    'aria-modal', 'aria-hidden',
   ]);
   const ariaOf = (n) => {
     const aria = {};

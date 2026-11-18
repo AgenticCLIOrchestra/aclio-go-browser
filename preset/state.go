@@ -92,6 +92,14 @@ type NameSource struct {
 // The one exception: Required is also set from the DOM (the required
 // attribute or aria-required="true") when the tree leaves it out, as it does
 // for a required checkbox.
+//
+// Ignored means Chromium leaves the element out of the accessibility tree,
+// so a screen reader announces nothing for it; IgnoredReasons says why
+// (Chromium's reason names, e.g. "ariaHiddenElement", "ariaHiddenSubtree",
+// "notRendered"). An ignored element reports only these two fields. Chromium
+// never ignores the element that has focus, even inside aria-hidden (it
+// exposes it so a screen reader can announce it), so in practice this is set
+// only on an ActiveDescendant.
 type AXState struct {
 	Checked         *string  `json:"checked,omitempty"`         // "true", "false" or "mixed": checkboxes, radios, switches, …
 	Pressed         *string  `json:"pressed,omitempty"`         // "true", "false" or "mixed": toggle buttons
@@ -112,6 +120,8 @@ type AXState struct {
 	KeyShortcuts    *string  `json:"keyShortcuts,omitempty"`    // aria-keyshortcuts, e.g. "Alt+S"
 	RoleDescription *string  `json:"roleDescription,omitempty"` // aria-roledescription, spoken instead of the role
 	Modal           bool     `json:"modal,omitempty"`           // modal dialogs
+	Ignored         bool     `json:"ignored,omitempty"`         // left out of the tree: a screen reader gets nothing for it
+	IgnoredReasons  []string `json:"ignoredReasons,omitempty"`  // why, e.g. "ariaHiddenElement", "notRendered"
 }
 
 // ActiveDescendant is the item a focused composite widget designates via

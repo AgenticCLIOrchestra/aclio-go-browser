@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-11-18
+
+### Added
+- `preset.AXState.Ignored` and `IgnoredReasons`: whether Chromium's accessibility tree leaves the element out, so a screen reader announces nothing for it, and why (Chromium's reason names, e.g. `ariaHiddenElement`, `ariaHiddenSubtree`, `notRendered`). An ignored element is reported as only `{"ignored": true, "ignoredReasons": [...]}`, with no role, name, text or other fields. Chromium never leaves out the element that has focus, even inside `aria-hidden` (it exposes it so a screen reader can announce it), so in practice this shows up on an `ActiveDescendant`: a listbox pointing at an `aria-hidden` or `display:none` item. `DefaultInitialPrompt` explains `ignored` to the agent
+
+### Changed
+- An ignored active descendant used to come back with no role or name but with its DOM text and attributes, which looked like an announced item with no name. It is now reported as ignored, with its reasons
+- `aria-hidden` is gone from `Aria`. When it takes effect, `ignored` and its reasons show it; on the focused element Chromium disregards it, so a screen reader never gets it
+
 ## [0.11.0] - 2026-11-18
 
 ### Added
@@ -109,6 +118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.12.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.8.0...v0.9.0

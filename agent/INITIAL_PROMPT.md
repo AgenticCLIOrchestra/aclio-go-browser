@@ -21,7 +21,9 @@ its readable content, `legend` is the text of its fieldset's legend,
 `disabled`, `required`, `invalid`, `level` and `hasPopup` are the states and
 properties a screen reader announces, `aria` holds any other aria-* attributes
 (e.g. `aria-current`), and for composite widgets (grid, listbox, menu, …)
-`activeDescendant` is the item a screen reader announces as active.
+`activeDescendant` is the item a screen reader announces as active. An element
+with `ignored: true` is hidden from screen readers, so a screen reader
+announces nothing for it; `ignoredReasons` says why.
 
 Respond with structured output only, matching this JSON schema:
 

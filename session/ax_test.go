@@ -48,10 +48,15 @@ func TestAXFromNode(t *testing.T) {
 		t.Errorf("unnamed = %+v", ax)
 	}
 
-	// Ignored: nothing at all.
-	n.Ignored = true
-	if ax := axFromNode(n); !reflect.DeepEqual(ax, axInfo{}) {
-		t.Errorf("ignored = %+v", ax)
+	// Ignored: only that and its reasons, even with a role, name and value.
+	n = cdpAXNode{}
+	if err := json.Unmarshal([]byte(`{"ignored":true,"ignoredReasons":[{"name":"ariaHiddenElement","value":{"type":"boolean","value":true}}],
+		"role":{"value":"none"},"name":{"value":"B"},"value":{"value":"x"},"properties":[{"name":"selected","value":{"value":true}}]}`), &n); err != nil {
+		t.Fatal(err)
+	}
+	wantIgnored := axInfo{State: preset.AXState{Ignored: true, IgnoredReasons: []string{"ariaHiddenElement"}}}
+	if ax := axFromNode(n); !reflect.DeepEqual(ax, wantIgnored) {
+		t.Errorf("ignored = %+v, want %+v", ax, wantIgnored)
 	}
 }
 
