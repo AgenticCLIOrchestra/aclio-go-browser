@@ -24,6 +24,16 @@ func DescribeFocused(s State) string {
 	return "Current focused element: " + string(b)
 }
 
+// DescribeAnnouncement gives what a screen reader said this turn
+// (State.Announcement), one spoken item per line, in order; it says so when
+// the screen reader said nothing.
+func DescribeAnnouncement(s State) string {
+	if len(s.Announcement) == 0 {
+		return "The screen reader said nothing this turn."
+	}
+	return "The screen reader said, in order:\n- " + strings.Join(s.Announcement, "\n- ")
+}
+
 // DescribeTabs lists the open tabs as compact JSON, one object per tab.
 func DescribeTabs(s State) string {
 	tabs := s.Tabs

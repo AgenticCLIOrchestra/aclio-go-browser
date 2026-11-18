@@ -155,6 +155,13 @@ func loop(b *session.Browser, req Request, p preset.Preset, dirs Dirs) (Result, 
 		maxTurns = DefaultMaxTurns
 	}
 
+	if p.Perceive.Focused {
+		// From here on, everything a screen reader says is recorded as it
+		// happens, and each snapshot takes what was said since the last.
+		if err := session.StartAnnouncing(b, p.Language); err != nil {
+			return res, err
+		}
+	}
 	st, err := snapshot(b, p, turnsDir, base)
 	if err != nil {
 		return res, err
@@ -317,15 +324,23 @@ func sessionOpts(o Options, dirs Dirs) session.Opts {
 // in chronological order.
 const debugStampLayout = "20060102-150405.000"
 
-// snapshot takes the turn's snapshot. When the preset doesn't perceive the DOM
-// (e.g. Blind), the DOM is still saved, formatted the same way, to the debug
-// dir as {stamp}-{name}-dom.html, out of the agent's reach. That copy is
-// best-effort, like the CLI's own debug dumps: failing to write it never fails
-// the run.
+// snapshot takes the turn's snapshot. When the preset perceives the focused
+// element, it adds everything the screen reader has said since the previous
+// snapshot (State.Announcement, see session.StartAnnouncing). When the preset doesn't perceive the DOM (e.g. Blind), the DOM is still
+// saved, formatted the same way, to the debug dir as
+// {stamp}-{name}-dom.html, out of the agent's reach. That copy is
+// best-effort, like the CLI's own debug dumps: failing to write it never
+// fails the run.
 func snapshot(b *session.Browser, p preset.Preset, turnsDir string, r aclio.Request) (preset.State, error) {
 	st, err := session.Snapshot(b, p.Perceive, turnsDir)
-	if err != nil || p.Perceive.DOM {
+	if err != nil {
 		return st, err
+	}
+	if p.Perceive.Focused {
+		st.Announcement = session.TakeAnnouncements(b)
+	}
+	if p.Perceive.DOM {
+		return st, nil
 	}
 	if dir := debugDir(r); dir != "" {
 		name := time.Now().Format(debugStampLayout) + "-" + debugName(r.Name) + "-dom.html"

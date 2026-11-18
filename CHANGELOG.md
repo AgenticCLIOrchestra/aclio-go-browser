@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-11-18
+
+### Added
+- Screen reader announcements. `State.Announcement` is everything a screen reader said since the previous turn, one spoken item per string, in order, e.g. `main`, `Prefs`, `form`, `Sort by`, `group`, `Ascending`, `selected`, `radio button`, `1 of 2`. Like a real screen reader, it speaks only about what happened. When focus moves, it says the context focus has just entered (landmarks, groups, … not shared with the previous focus), then the element (name, value, states, role, position, description), then its active descendant. When focus stays on the same element, it says only what changed (the new value, the states it gained, e.g. `checked` after Space, or the new item when arrowing through a listbox). Otherwise it says nothing. The wording is modelled on VoiceOver ("edit text", "pop-up button", "dimmed", "heading level 2")
+- `preset.Language`, a string-based enum for the announcement's wording: `preset.LanguageEnUS` (`"en-US"`, the default: "checkbox", "checked") and `preset.LanguageEnGB` (`"en-GB"`: "tick box", "ticked"), with `preset.Languages`, `preset.ResolveLanguage` and `preset.DefaultLanguage`. Set it on the new `Preset.Language`; `preset.Validate` refuses an unsupported one
+- `preset.Announce(cur, prev, language)`, which builds one announcement from the element focused now and the one focused just before
+- `session.StartAnnouncing(b, language)` and `session.TakeAnnouncements(b)`, which record what a screen reader says as it happens and hand it over, emptying the store. The page queues the element focused at every `focusin`, and at every change to the focused element or its active descendant (`input`, `change`, and the attributes a screen reader announces). Go turns each into an announcement in the background as the page signals, after each action `Perform` runs, and when the announcements are taken. So a batch of actions (Tab, Tab, Space, …) is heard step by step, and so are changes the page makes by itself, such as a dialog taking focus. Switching tabs announces where focus is in the new tab. `Run` and `Loop` start it for a preset that perceives the focused element, and each snapshot takes what was said into `State.Announcement`. Chromium only. Focus inside iframes isn't heard yet
+- `preset.DescribeAnnouncement`, which renders `State.Announcement` for the agent, one item per line, or says the screen reader said nothing
+- `PosInSet` / `SetSize` on `FocusedElement` and `ActiveDescendant` (`posInSet` / `setSize`): the position a screen reader announces ("2 of 5"). They come from `aria-posinset` / `aria-setsize` when the page sets them, otherwise they are counted from the DOM (radios with the same name in the same form, or visible siblings with the same role), since Chromium's accessibility tree doesn't report them. `aria-posinset` and `aria-setsize` are gone from `Aria`
+- `NodeID` on `FocusedElement` and `ActiveDescendant`: Chromium's id for the element's DOM node, which tells whether focus moved. It isn't part of the JSON
+
+### Changed
+- `Blind()` is now told only what a screen reader said (`DescribeAnnouncement`), plus the open tabs, instead of the focused element as JSON. The raw fields stay in `State.Focused`, and `DescribeFocused` still renders them for custom presets. `DefaultInitialPrompt` explains the announcement to the agent
+- `session.Focused` now reads the focused element and its accessibility node in one go, so a page that moves focus mid-read can no longer mismatch them
+
 ## [0.15.1] - 2026-11-18
 
 ### Fixed
@@ -138,6 +153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.16.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.13.0...v0.14.0

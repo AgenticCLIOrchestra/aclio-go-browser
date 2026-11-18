@@ -32,6 +32,9 @@ func Perform(b *Browser, actions []action.Action) []action.Performed {
 		return performed
 	}
 
+	// What the screen reader said before this batch is heard first; then,
+	// after each action, what it set off, before the next action can move on.
+	processAnnouncements(b.announcer)
 	for i := range performed {
 		p := &performed[i]
 		p.Attempted = true
@@ -44,6 +47,7 @@ func Perform(b *Browser, actions []action.Action) []action.Performed {
 		if err == nil && touchesPage(p.Type) {
 			err = waitForLoad(b)
 		}
+		processAnnouncements(b.announcer)
 		if err != nil {
 			setReason(p, err)
 			break

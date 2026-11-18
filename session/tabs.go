@@ -32,7 +32,7 @@ func openTab(b *Browser) error {
 	if err := p.BringToFront(); err != nil {
 		return err
 	}
-	b.active = p
+	setActive(b, p)
 	return nil
 }
 
@@ -45,7 +45,7 @@ func switchTab(b *Browser, index int) error {
 	if err := p.BringToFront(); err != nil {
 		return err
 	}
-	b.active = p
+	setActive(b, p)
 	return nil
 }
 
@@ -73,6 +73,6 @@ func closeTab(b *Browser, index int) error {
 	if err := p.BringToFront(); err != nil {
 		return err
 	}
-	b.active = p
+	setActive(b, p)
 	return nil
 }
