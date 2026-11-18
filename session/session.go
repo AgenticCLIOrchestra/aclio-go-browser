@@ -66,6 +66,7 @@ type Browser struct {
 	active       playwright.Page
 	artifactsDir string
 	closed       bool
+	announcer    *announcer // nil unless StartAnnouncing was called
 }
 
 // Engine reports which browser b is.
@@ -190,6 +191,7 @@ func Close(b *Browser) error {
 		return nil
 	}
 	b.closed = true
+	stopAnnouncer(b)
 
 	var errs []error
 	if b.context != nil {

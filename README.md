@@ -88,6 +88,7 @@ One `*session.Browser` is one live browser: its own Playwright driver, browser, 
 - **`Close(b)`** closes the context (which finishes the video), the browser and the driver. Closing twice is fine.
 - **`Perform(b, actions)`** runs `action.Validate` on every action, performs them in order, and stops at the first failure. Failures come back in each action's `Reason`, not as an error, so they can go straight to the agent. After each action that touches the page it waits for the page's load event. `javascript` returns its result as JSON.
 - **`Snapshot(b, perception, dir)`** captures only what the preset perceives. A preset that perceives neither screenshot nor DOM (e.g. `Blind()`) writes no files at all.
+- **`StartAnnouncing(b, language)` / `TakeAnnouncements(b)`** record what a screen reader says as it happens, and hand it over (emptying the store); see [Screen reader announcement](#screen-reader-announcement). Chromium only.
 - **`Tabs`, `Focused`, `Navigate`.** `Navigate` is for you (e.g. the start page), so unlike the agent's `goTo` it accepts any URL. `Focused` needs Chromium: the focused element's `role`, `name`, `nameSources`, `value`, `description`, states and properties and `context` (and, except `context`, its active descendant's) come from Chromium's own accessibility tree, the one a screen reader is given. `role` is the explicit role when valid and otherwise the implicit one (a `<button>` is `button`, a plain `<div>` `generic`). For the few elements Chromium gives one of its own internal roles instead of an ARIA one, the nearest ARIA role is reported: `textbox` for the date and time inputs, `button` for `<summary>` and the colour input, and `generic` for those with no corresponding ARIA role (`<video>`, `<audio>`, `<canvas>`, `<iframe>`, `<label>`, …). `name` is the one accessible name a screen reader announces (`""` when there is none), and `nameSources` lists every source that had a value (`aria-labelledby`, `aria-label`, `labelfor`, `contents`, `title`, …) in precedence order, marking the outranked ones `superseded`. `value` is what a screen reader reads as the value: the text in a field (masked for a password), a drop-down's selected text, a slider's number; it is absent for checkboxes, radios, buttons and links. `description` is the accessible description a screen reader reads after the rest: the text of the `aria-describedby` targets (even hidden ones), else `aria-description`, else a `title` the name didn't already use. The states and properties (`preset.AXState`: `checked` as `"true"`, `"false"` or `"mixed"`, `pressed`, `selected`, `expanded`, `disabled`, `readOnly`, `required`, `invalid`, `level`, `hasPopup`, `multiselectable`, `orientation`, `valueMin` / `valueMax` / `valueText`, `autocomplete`, `keyShortcuts`, `roleDescription`, `modal`, `ignored` / `ignoredReasons`) are the same for native and ARIA markup and reflect what the user did. Chromium leaves `required` out for some controls (e.g. a required checkbox), so the DOM's `required` / `aria-required` stands in then. An element the tree leaves out (`ignored`, e.g. an active descendant with `aria-hidden` or `display:none`) is reported as only that and its `ignoredReasons`, since a screen reader announces nothing for it. Chromium never leaves out the focused element itself, even inside `aria-hidden`. `context` is the focused element's ancestors in the tree, outermost first, as `{role, name}`: the landmarks, groups, lists, tables and dialogs a screen reader announces when focus moves into them (e.g. `main`, `form` "Prefs", `group` "Sort by" for a radio in a fieldset). Generic wrappers, ignored nodes and the document itself are left out. A screen reader announces only the ones focus has just entered; `context` has them all, every turn. `aria` keeps only the aria-* attributes none of these cover (e.g. `aria-current`, `aria-valuetext`, `aria-setsize`), which the tree doesn't report.
 
 Artifacts are reached only through an `os.Root` on the artifacts directory, so neither a crafted name nor a planted symlink can reach outside it. Creating an artifact that exists fails. `readArtifact` refuses binary files and files over 1 MB.
@@ -158,6 +159,7 @@ type Preset struct {
     Targeting action.Targeting   // selector and/or point
     Perceive  preset.Perception  // screenshot, DOM, focused element, tabs
     Describe  func(preset.State) string // how the page state is put to the agent
+    Language  preset.Language    // the screen reader's wording: LanguageEnUS (default) or LanguageEnGB
 }
 ```
 
@@ -167,10 +169,33 @@ type Preset struct {
 |-------------|---------|-----------|-----------|
 | `Default()` | everything except the artifact actions (`javascript` included) | selector, point | screenshot, DOM, tabs |
 | `Full()`    | everything | selector, point | screenshot, DOM, tabs |
-| `Blind()`   | `type`, `press`, `wait`, tabs | none | focused element (screen-reader view), tabs |
+| `Blind()`   | `type`, `press`, `wait`, tabs | none | what a screen reader says (focused element), tabs |
 | `Motor()`   | `Blind`'s actions plus `goTo` | none | screenshot, DOM, tabs |
 
 **`Blind()` runs on Chromium only.** Any preset that perceives the focused element (`Blind()` and every copy of it, renamed or not) is refused on Firefox: its screen-reader view comes partly from Chromium's own accessibility tree (the computed `role`, the accessible `name`, the `value`, the `description`, the states and properties and the `context`), which Firefox doesn't expose. `Run` refuses before creating any directory or launching the browser; `Loop` refuses before the first turn. `Default()`, `Full()` and `Motor()` run on either browser.
+
+### Screen reader announcement
+
+`Blind()` is told only what a screen reader said since its last turn (`State.Announcement`, rendered by `DescribeAnnouncement`), plus the open tabs: one spoken item per line, in order.
+
+It is recorded as it happens, not worked out from where the page ends up: `Run` and `Loop` call `session.StartAnnouncing` for a preset that perceives the focused element. From then on the page queues the element focused at every `focusin`, and at every change to the focused element or its active descendant (`input`, `change`, and the attributes a screen reader announces). Go turns each into an announcement, in the background as the page signals, after each action `Perform` runs, and when a turn takes them with `session.TakeAnnouncements`, which also empties the store. So a batch of actions (Tab, Tab, Space, …) is heard step by step, and so are changes the page makes by itself, such as a dialog taking focus while the agent is thinking. Switching tabs announces where focus is in the new one. Focus inside iframes isn't heard yet.
+
+Each announcement comes from `preset.Announce(cur, prev, language)`, which behaves like a real screen reader, speaking only about what happened:
+
+- **Focus moved** (or nothing was focused before): the context focus has just entered, then the element, then its active descendant if it has one. The context is the landmarks, groups, lists and dialogs not shared with the previous focus, each as its name and role. The element is its name, value, states, role, position ("2 of 5") and description.
+- **Focus stayed on the same element:** only what changed: the new value, the states it just gained (e.g. `ticked` after Space on a checkbox), or the new active item when arrowing through a listbox.
+- **Nothing changed, nothing focused, or the element is hidden from screen readers:** nothing. When nothing at all was said since the last turn, the agent is told so.
+
+For example, tabbing into a radio group and then pressing the down arrow:
+
+```
+main · Prefs · form · Sort by · group · Ascending · selected · radio button · 1 of 2
+Descending · selected · radio button · 2 of 2
+```
+
+The wording is modelled on VoiceOver ("edit text", "pop-up button", "dimmed", "heading level 2"). `Preset.Language` picks US English (`preset.LanguageEnUS`, the default: "checkbox", "checked") or British English (`preset.LanguageEnGB`: "tick box", "ticked"); `preset.Validate` refuses any other. The position comes from `aria-posinset` / `aria-setsize` when the page sets them, otherwise it is counted from the DOM (radios with the same name in the same form, or visible siblings with the same role), since Chromium's accessibility tree doesn't report it.
+
+The raw fields the announcement is built from stay in `State.Focused` (see [session](#session)), for you and for custom presets: `DescribeFocused` renders them as JSON.
 
 Each built-in is a function that returns a fresh copy, so changing yours never affects anyone else's:
 
@@ -197,7 +222,7 @@ p := preset.Preset{
 if err := preset.Validate(p); err != nil { … }
 ```
 
-`preset.Validate` catches an unknown or duplicate action, an action that needs a target when `Targeting` allows none, and a missing name or `Describe`.
+`preset.Validate` catches an unknown or duplicate action, an action that needs a target when `Targeting` allows none, a missing name or `Describe`, and an unsupported `Language`.
 
 `preset.Check(p, a)` is the one call to make on each returned action. It returns an error explaining why `a` can't be performed under `p`: a type `p` doesn't offer, an invalid payload, or a target kind `p` doesn't allow. That error is meant to go back to the agent.
 

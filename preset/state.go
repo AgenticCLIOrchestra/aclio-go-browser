@@ -6,7 +6,13 @@ type State struct {
 	ScreenshotPath string          // PNG of the viewport, if Perceive.Screenshot
 	DOMPath        string          // full DOM as HTML, if Perceive.DOM
 	Focused        *FocusedElement // nil when nothing meaningful is focused
-	Tabs           []Tab           // in browser order, if Perceive.Tabs
+	// Announcement is everything a screen reader said since the previous
+	// turn's snapshot, one spoken item per string, in order: each focus
+	// change and each change to the focused element, as it happened (see
+	// Announce and session.StartAnnouncing). Filled by Run / Loop when the
+	// preset perceives the focused element; empty when it said nothing.
+	Announcement []string
+	Tabs         []Tab // in browser order, if Perceive.Tabs
 }
 
 // Tab summarises one open tab.
@@ -69,6 +75,18 @@ type Tab struct {
 // screen reader announces only the ones focus has just entered; Context has
 // them all, every turn.
 //
+// PosInSet and SetSize are the element's position in its set and the set's
+// size, as a screen reader announces them ("2 of 5"): aria-posinset /
+// aria-setsize when the page sets them, otherwise counted from the DOM, as
+// Chromium's accessibility tree doesn't report them: radios with the same
+// name in the same form, or visible siblings with the same role (options,
+// tabs, menu items, tree items, list items, …). They are set only for
+// elements in such a set.
+//
+// NodeID is Chromium's id for the element's DOM node, stable while the node
+// lives (0 when unknown). Announce uses it to tell whether focus moved; it is
+// not part of the JSON.
+//
 // Aria holds only the aria-* attributes that none of the fields above cover
 // (e.g. aria-current, aria-valuetext, aria-setsize / aria-posinset,
 // aria-controls), since Chromium's accessibility tree doesn't report them.
@@ -81,6 +99,9 @@ type FocusedElement struct {
 	SelectedText     *string           `json:"selectedText,omitempty"` // a list-style <select>'s selected options, ", "-joined
 	Description      *string           `json:"description,omitempty"`  // accessible description, from Chromium's accessibility tree
 	Context          []ContextItem     `json:"context,omitempty"`      // ancestors a screen reader may announce, outermost first
+	PosInSet         *int              `json:"posInSet,omitempty"`     // its position in its set ("2" of 5), see below
+	SetSize          *int              `json:"setSize,omitempty"`      // the size of that set
+	NodeID           int               `json:"-"`                      // Chromium's DOM node id, to tell whether focus moved
 	AXState                            // states and properties, from Chromium's accessibility tree
 	Aria             map[string]string `json:"aria,omitempty"`             // aria-* attributes no other field covers
 	ActiveDescendant *ActiveDescendant `json:"activeDescendant,omitempty"` // element aria-activedescendant points at
@@ -150,7 +171,8 @@ type ContextItem struct {
 // ActiveDescendant is the item a focused composite widget designates via
 // aria-activedescendant: what a screen reader announces while DOM focus stays
 // on the container. Missing is set when the id resolves to no element. Role,
-// Name, NameSources, Value, Description, AXState and Aria follow the same rules as on
+// Name, NameSources, Value, Description, PosInSet, SetSize, NodeID, AXState
+// and Aria follow the same rules as on
 // FocusedElement.
 type ActiveDescendant struct {
 	Role        *string      `json:"role,omitempty"`
@@ -159,6 +181,9 @@ type ActiveDescendant struct {
 	Value       *string      `json:"value,omitempty"`
 	Text        *string      `json:"text,omitempty"`
 	Description *string      `json:"description,omitempty"`
+	PosInSet    *int         `json:"posInSet,omitempty"`
+	SetSize     *int         `json:"setSize,omitempty"`
+	NodeID      int          `json:"-"`
 	AXState
 	Aria    map[string]string `json:"aria,omitempty"`
 	Missing bool              `json:"missing,omitempty"`

@@ -38,6 +38,10 @@ type Preset struct {
 	// Describe renders the captured State as the text the agent is given
 	// about the page each turn.
 	Describe func(State) string
+	// Language is what a screen reader's announcement (State.Announcement)
+	// is worded in, for a preset that perceives the focused element. The
+	// zero value means DefaultLanguage (US English).
+	Language Language
 }
 
 // Perception selects which page state is captured each turn.
@@ -49,8 +53,8 @@ type Perception struct {
 }
 
 // Validate reports every problem with p: a missing name or Describe, no
-// actions, unknown or duplicate action types, and actions that need a target
-// when Targeting allows none.
+// actions, unknown or duplicate action types, actions that need a target
+// when Targeting allows none, and an unsupported Language.
 func Validate(p Preset) error {
 	var errs []error
 	if p.Name == "" {
@@ -60,6 +64,9 @@ func Validate(p Preset) error {
 		errs = append(errs, errors.New("describe is nil"))
 	}
 	if _, err := Schema(p); err != nil {
+		errs = append(errs, err)
+	}
+	if _, err := ResolveLanguage(p.Language); err != nil {
 		errs = append(errs, err)
 	}
 	if err := errors.Join(errs...); err != nil {

@@ -138,8 +138,12 @@ func TestDescribe(t *testing.T) {
 	if strings.Contains(blind, "shot.png") {
 		t.Errorf("blind describe leaks screenshot: %q", blind)
 	}
-	if !strings.Contains(blind, "No element is currently focused.") {
+	if !strings.Contains(blind, "The screen reader said nothing this turn.") || !strings.Contains(blind, `"active":true`) {
 		t.Errorf("blind describe = %q", blind)
+	}
+	s.Announcement = []string{"Save", "button"}
+	if got := Blind().Describe(s); !strings.Contains(got, "said, in order:\n- Save\n- button") {
+		t.Errorf("blind describe with an announcement = %q", got)
 	}
 
 	s.Focused = &FocusedElement{Role: ptr("button"), Text: ptr("Save")}

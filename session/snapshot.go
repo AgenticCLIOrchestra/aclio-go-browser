@@ -117,48 +117,82 @@ func Focused(b *Browser) (*preset.FocusedElement, error) {
 	if b.engine != engine.Chromium {
 		return nil, fmt.Errorf("session: the focused element needs Chromium, not %s", b.engine)
 	}
-	raw, err := b.active.Evaluate(focusedElementJS)
+	s, err := b.context.NewCDPSession(b.active)
 	if err != nil {
 		return nil, fmt.Errorf("session: reading the focused element: %w", err)
 	}
-	if raw == nil {
+	defer s.Detach()
+	id, err := objectID(s, `document.activeElement`)
+	if err != nil || id == "" {
+		return nil, err
+	}
+	fe, err := focusedOf(s, id)
+	if err != nil {
+		return nil, fmt.Errorf("session: reading the focused element: %w", err)
+	}
+	return fe, nil
+}
+
+// focusedOf builds the screen-reader view of the element with CDP object id
+// id: focusedElementJS run on it, then addAX. nil when it is the body or the
+// document element (nothing meaningful focused).
+func focusedOf(s playwright.CDPSession, id string) (*preset.FocusedElement, error) {
+	var res struct {
+		Result struct {
+			Value json.RawMessage `json:"value"`
+		} `json:"result"`
+		ExceptionDetails any `json:"exceptionDetails"`
+	}
+	if err := cdpSend(s, "Runtime.callFunctionOn", map[string]any{
+		"objectId":            id,
+		"functionDeclaration": focusedElementJS,
+		"returnByValue":       true,
+	}, &res); err != nil {
+		return nil, err
+	}
+	if res.ExceptionDetails != nil {
+		return nil, fmt.Errorf("focusedElementJS: %v", res.ExceptionDetails)
+	}
+	if len(res.Result.Value) == 0 || string(res.Result.Value) == "null" {
 		return nil, nil
 	}
-	data, err := json.Marshal(raw)
-	if err != nil {
-		return nil, fmt.Errorf("session: reading the focused element: %w", err)
-	}
 	var fe preset.FocusedElement
-	if err := json.Unmarshal(data, &fe); err != nil {
-		return nil, fmt.Errorf("session: reading the focused element: %w", err)
+	if err := json.Unmarshal(res.Result.Value, &fe); err != nil {
+		return nil, err
 	}
-	if err := addAX(b, &fe); err != nil {
-		return nil, fmt.Errorf("session: reading the focused element's accessibility node: %w", err)
+	if err := addAX(s, id, &fe); err != nil {
+		return nil, fmt.Errorf("accessibility node: %w", err)
 	}
 	return &fe, nil
 }
 
-// addAX fills in the role, the accessible name and its sources, the value, the
-// description and the states and properties of the focused element and of its active
-// descendant, and the focused element's context (its announced ancestors),
-// from Chromium's accessibility tree. An element the tree ignores
-// is reduced to that fact and its reasons.
-// They are read in a separate call from focusedElementJS, so a page that moves
-// focus in between could mismatch them; snapshots are taken once the page has
-// settled.
-func addAX(b *Browser, fe *preset.FocusedElement) error {
-	s, err := b.context.NewCDPSession(b.active)
-	if err != nil {
-		return err
+// objectID evaluates expr in the page and returns the CDP object id of the
+// element it gives, "" when it gives none.
+func objectID(s playwright.CDPSession, expr string) (string, error) {
+	var ev struct {
+		Result struct {
+			ObjectID string `json:"objectId"`
+		} `json:"result"`
 	}
-	defer s.Detach()
-	ax, err := axNode(s, `document.activeElement`, true)
+	if err := cdpSend(s, "Runtime.evaluate", map[string]any{"expression": expr}, &ev); err != nil {
+		return "", err
+	}
+	return ev.Result.ObjectID, nil
+}
+
+// addAX fills in the role, the accessible name and its sources, the value, the
+// description and the states and properties of the element with object id
+// id and of its active descendant, and the element's context (its announced
+// ancestors), from Chromium's accessibility tree. An element the tree ignores
+// is reduced to that fact and its reasons.
+func addAX(s playwright.CDPSession, id string, fe *preset.FocusedElement) error {
+	ax, err := axNode(s, id, true)
 	if err != nil {
 		return err
 	}
 	if ax.State.Ignored {
 		// A screen reader gets nothing for it, so nothing else is reported.
-		*fe = preset.FocusedElement{AXState: ax.State}
+		*fe = preset.FocusedElement{AXState: ax.State, NodeID: ax.NodeID}
 		return nil
 	}
 	// The DOM's required (see focusedElementJS) stands in when the tree leaves
@@ -166,33 +200,57 @@ func addAX(b *Browser, fe *preset.FocusedElement) error {
 	domRequired := fe.Required
 	fe.Role, fe.Name, fe.NameSources, fe.Value, fe.Description, fe.AXState = ax.Role, ax.Name, ax.NameSources, ax.Value, ax.Description, ax.State
 	fe.Required = fe.Required || domRequired
-	fe.Context = ax.Context
+	fe.Context, fe.NodeID = ax.Context, ax.NodeID
 	if ad := fe.ActiveDescendant; ad != nil && !ad.Missing {
-		if ax, err = axNode(s, activeDescendantJS, false); err != nil {
+		adID, err := callForObject(s, id, activeDescendantJS)
+		if err != nil || adID == "" {
+			return err
+		}
+		if ax, err = axNode(s, adID, false); err != nil {
 			return err
 		}
 		if ax.State.Ignored {
-			*ad = preset.ActiveDescendant{AXState: ax.State}
+			*ad = preset.ActiveDescendant{AXState: ax.State, NodeID: ax.NodeID}
 			return nil
 		}
 		ad.Role, ad.Name, ad.NameSources, ad.Value, ad.Description, ad.AXState = ax.Role, ax.Name, ax.NameSources, ax.Value, ax.Description, ax.State
+		ad.NodeID = ax.NodeID
 	}
 	return nil
 }
 
-// activeDescendantJS finds the focused element's aria-activedescendant the way
-// focusedElementJS does: in the element's own tree first, then the document.
-const activeDescendantJS = `(() => {
-  const el = document.activeElement;
-  const id = el && el.getAttribute('aria-activedescendant');
+// callForObject calls fn on the object with id and returns the object id of
+// the element it returns, "" when it returns none.
+func callForObject(s playwright.CDPSession, id, fn string) (string, error) {
+	var res struct {
+		Result struct {
+			ObjectID string `json:"objectId"`
+		} `json:"result"`
+	}
+	if err := cdpSend(s, "Runtime.callFunctionOn", map[string]any{
+		"objectId":            id,
+		"functionDeclaration": fn,
+	}, &res); err != nil {
+		return "", err
+	}
+	return res.Result.ObjectID, nil
+}
+
+// activeDescendantJS finds an element's aria-activedescendant (this is the
+// element) the way focusedElementJS does: in the element's own tree first,
+// then the document.
+const activeDescendantJS = `function () {
+  const el = this;
+  const id = el.getAttribute('aria-activedescendant');
   if (!id) return null;
   const scope = el.getRootNode && el.getRootNode().getElementById ? el.getRootNode() : document;
   return scope.getElementById(id) || document.getElementById(id);
-})()`
+}`
 
 // cdpAXNode is the part of a CDP Accessibility.AXNode we read.
 type cdpAXNode struct {
 	NodeID         string `json:"nodeId"`
+	BackendNodeID  int    `json:"backendDOMNodeId"`
 	ParentID       string `json:"parentId"`
 	Ignored        bool   `json:"ignored"`
 	IgnoredReasons []struct {
@@ -239,6 +297,7 @@ type axInfo struct {
 	Description *string
 	State       preset.AXState
 	Context     []preset.ContextItem
+	NodeID      int // Chromium's DOM node id (backendDOMNodeId)
 }
 
 // axFromNode picks the role, name, name sources, value, description and states
@@ -251,9 +310,9 @@ func axFromNode(n cdpAXNode) axInfo {
 		for _, r := range n.IgnoredReasons {
 			st.IgnoredReasons = append(st.IgnoredReasons, r.Name)
 		}
-		return axInfo{State: st}
+		return axInfo{State: st, NodeID: n.BackendNodeID}
 	}
-	var ax axInfo
+	ax := axInfo{NodeID: n.BackendNodeID}
 	ax.Role = ariaRole(n)
 	if n.Value != nil {
 		switch v := n.Value.Value.(type) {
@@ -443,26 +502,15 @@ func axContext(nodes []cdpAXNode, id string) []preset.ContextItem {
 	return ctx
 }
 
-// axNode evaluates expr to an element and returns what its node in Chromium's
-// accessibility tree says; the zero axInfo when expr gives no element. With
-// withContext, it also fetches the node's ancestors for axInfo.Context.
-func axNode(s playwright.CDPSession, expr string, withContext bool) (axInfo, error) {
-	var ev struct {
-		Result struct {
-			ObjectID string `json:"objectId"`
-		} `json:"result"`
-	}
-	if err := cdpSend(s, "Runtime.evaluate", map[string]any{"expression": expr}, &ev); err != nil {
-		return axInfo{}, err
-	}
-	if ev.Result.ObjectID == "" {
-		return axInfo{}, nil
-	}
+// axNode returns what the node in Chromium's accessibility tree of the
+// element with object id id says. With withContext, it also fetches the
+// node's ancestors for axInfo.Context.
+func axNode(s playwright.CDPSession, id string, withContext bool) (axInfo, error) {
 	var tree struct {
 		Nodes []cdpAXNode `json:"nodes"`
 	}
 	if err := cdpSend(s, "Accessibility.getPartialAXTree", map[string]any{
-		"objectId":       ev.Result.ObjectID,
+		"objectId":       id,
 		"fetchRelatives": false,
 	}, &tree); err != nil {
 		return axInfo{}, err
@@ -480,7 +528,7 @@ func axNode(s playwright.CDPSession, expr string, withContext bool) (axInfo, err
 		Nodes []cdpAXNode `json:"nodes"`
 	}
 	if err := cdpSend(s, "Accessibility.getPartialAXTree", map[string]any{
-		"objectId":       ev.Result.ObjectID,
+		"objectId":       id,
 		"fetchRelatives": true,
 	}, &rel); err != nil {
 		return axInfo{}, err
@@ -507,15 +555,17 @@ func cdpSend(s playwright.CDPSession, method string, params map[string]any, out 
 
 // focusedElementJS reads what Chromium's accessibility tree doesn't give us
 // (the role, name, value, states and properties come from there, see addAX)
-// off document.activeElement: text skips hidden subtrees and uses
-// descendants' aria-label / img alt; inline elements join without spaces;
-// required stands in for the tree's when it leaves it out; only the aria-* attributes no other field
-// covers are kept; composite widgets (grid, listbox, menu, …) report their
-// aria-activedescendant instead of their own content. A field is included only when its source is present,
-// so "" stays distinct from absent.
-const focusedElementJS = `() => {
-  const el = document.activeElement;
-  if (!el || el === document.body) return null;
+// off the element it is called on (this; null for the body or the document
+// element): text skips hidden subtrees and uses descendants' aria-label / img
+// alt; inline elements join without spaces; required stands in for the
+// tree's when it leaves it out; the position in a set is counted; only the
+// aria-* attributes no other field covers are kept; composite widgets (grid,
+// listbox, menu, …) report their aria-activedescendant instead of their own
+// content. A field is included only when its source is present, so "" stays
+// distinct from absent.
+const focusedElementJS = `function () {
+  const el = this;
+  if (!el || el.nodeType !== Node.ELEMENT_NODE || el === document.body || el === document.documentElement) return null;
 
   const COMPOSITE = new Set(['grid', 'treegrid', 'listbox', 'menu', 'menubar', 'tree', 'tablist', 'radiogroup']);
   const MAX = 500;
@@ -563,8 +613,38 @@ const focusedElementJS = `() => {
     'aria-disabled', 'aria-readonly', 'aria-required', 'aria-invalid', 'aria-level',
     'aria-haspopup', 'aria-multiselectable', 'aria-orientation', 'aria-valuemin',
     'aria-valuemax', 'aria-autocomplete', 'aria-keyshortcuts', 'aria-roledescription',
-    'aria-modal', 'aria-hidden', 'aria-description',
+    'aria-modal', 'aria-hidden', 'aria-description', 'aria-posinset', 'aria-setsize',
   ]);
+  // Position in a set ("2 of 5"), which the accessibility tree doesn't give:
+  // the page's aria-posinset / aria-setsize, otherwise counted the way
+  // Chromium does: radios sharing a name in the same form, or visible
+  // siblings with the same role.
+  const SET_ROLES = new Set(['radio', 'option', 'tab', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'treeitem', 'listitem']);
+  const roleOf = (n) => {
+    const r = (n.getAttribute('role') || '').trim().split(/\s+/)[0];
+    if (r) return r;
+    if (n.tagName === 'LI') return 'listitem';
+    if (n.tagName === 'OPTION') return 'option';
+    if (n.tagName === 'INPUT' && n.type === 'radio') return 'radio';
+    return '';
+  };
+  const addPos = (n, o) => {
+    const role = roleOf(n);
+    let set = null;
+    if (n.tagName === 'INPUT' && n.type === 'radio' && n.name) {
+      const root = n.form || n.getRootNode();
+      set = Array.from(root.querySelectorAll('input[type="radio"]'))
+        .filter((r) => r.name === n.name && r.form === n.form && !isHidden(r));
+    } else if (SET_ROLES.has(role) && n.parentElement) {
+      set = Array.from(n.parentElement.children).filter((c) => roleOf(c) === role && !isHidden(c));
+    }
+    const ap = parseInt(n.getAttribute('aria-posinset'), 10);
+    const as = parseInt(n.getAttribute('aria-setsize'), 10);
+    const i = set ? set.indexOf(n) : -1;
+    const pos = ap > 0 ? ap : i + 1;
+    const size = as > 0 ? as : set ? set.length : 0;
+    if (pos > 0 && size > 0) { o.posInSet = pos; o.setSize = size; }
+  };
   const ariaOf = (n) => {
     const aria = {};
     for (const a of n.attributes) if (a.name.startsWith('aria-') && !COVERED.has(a.name)) aria[a.name] = a.value;
@@ -588,6 +668,7 @@ const focusedElementJS = `() => {
   // Chromium's accessibility tree leaves required out for some controls (e.g.
   // a required checkbox); this stands in for it then (see addAX).
   if (el.required === true || el.getAttribute('aria-required') === 'true') out.required = true;
+  addPos(el, out);
   const aria = ariaOf(el);
   if (aria) out.aria = aria;
 
@@ -599,6 +680,7 @@ const focusedElementJS = `() => {
     } else {
       const a = {};
       const t = srText(ad); if (t) a.text = t;
+      addPos(ad, a);
       const aa = ariaOf(ad); if (aa) a.aria = aa;
       out.activeDescendant = a;
     }

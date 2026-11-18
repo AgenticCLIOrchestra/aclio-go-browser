@@ -108,3 +108,23 @@ func TestFocusedNeedsChromium(t *testing.T) {
 		t.Errorf("Focused on Firefox = %v, want a Chromium error", err)
 	}
 }
+
+// Announcing needs Chromium like Focused, refuses an unsupported language,
+// and a browser that isn't announcing has nothing to take.
+func TestAnnouncingChecks(t *testing.T) {
+	if err := StartAnnouncing(&Browser{engine: engine.Firefox}, ""); err == nil || !strings.Contains(err.Error(), "Chromium") {
+		t.Errorf("StartAnnouncing on Firefox = %v, want a Chromium error", err)
+	}
+	if err := StartAnnouncing(&Browser{engine: engine.Chromium}, "de-DE"); err == nil {
+		t.Error("StartAnnouncing should refuse an unsupported language")
+	}
+	if err := StartAnnouncing(nil, ""); err == nil {
+		t.Error("StartAnnouncing on nil should fail")
+	}
+	if got := TakeAnnouncements(&Browser{}); got != nil {
+		t.Errorf("TakeAnnouncements without announcing = %q, want nil", got)
+	}
+	if got := TakeAnnouncements(nil); got != nil {
+		t.Errorf("TakeAnnouncements(nil) = %q", got)
+	}
+}

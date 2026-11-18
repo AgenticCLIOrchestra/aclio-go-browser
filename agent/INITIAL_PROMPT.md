@@ -9,8 +9,20 @@ The current page state:
 Any file paths above are relative to your working directory; open them with the
 Read tool. A DOM (HTML) file can be very large: find what you need with the Grep
 tool (e.g. a label, an id or a role), then read it in chunks (using an offset
-and limit) around the matches rather than all at once. A focused
-element, when given, is a screen-reader view of where keyboard focus is: `role`
+and limit) around the matches rather than all at once.
+
+What the screen reader said, when given, is everything you perceive of the
+page, as a blind user would: everything it said since your last turn, one
+spoken item per line, in order, including each step of your actions (every
+Tab, arrow key, …) and changes the page made by itself (e.g. a dialog taking
+focus). Like a real screen reader, it speaks when focus moves (where you have just entered, such
+as a landmark or group, then the element: its name, value, states, role,
+position such as "2 of 5", and description) and when the focused element
+changes (e.g. "checked" after Space on a checkbox). When nothing changed it
+says nothing. Move focus with the keyboard (Tab, Shift+Tab, arrow keys) to
+hear more.
+
+A focused element, when given, is a screen-reader view of where keyboard focus is: `role`
 and `name` are what a screen reader announces it as (`name` is "" when it has
 none), `nameSources` lists where its name could come from and which one won
 (the others are `superseded`), `value` is its current value (what is typed in
