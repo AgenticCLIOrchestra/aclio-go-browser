@@ -29,8 +29,12 @@ type Tab struct {
 // Role is the computed role a screen reader is given, read from Chromium's
 // accessibility tree: the explicit role attribute when valid, otherwise the
 // element's implicit one (a <button> is "button", a radio input "radio", a
-// plain <div> "generic"). It is omitted when the element is left out of that
-// tree.
+// plain <div> "generic"). For the few elements Chromium gives one of its own
+// internal roles instead of an ARIA one, the nearest ARIA role is reported:
+// "textbox" for the date and time inputs, "button" for <summary> and the
+// colour input, and "generic" for those with no corresponding ARIA role
+// (<video>, <audio>, <canvas>, <iframe>, <label>, …). It is omitted when the
+// element is left out of that tree.
 //
 // Name is the accessible name a screen reader announces, as Chromium computes
 // it: one name, from the first source that has a value in the spec's order

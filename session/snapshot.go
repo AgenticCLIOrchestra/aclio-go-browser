@@ -254,9 +254,7 @@ func axFromNode(n cdpAXNode) axInfo {
 		return axInfo{State: st}
 	}
 	var ax axInfo
-	if n.Role != nil && n.Role.Value != "" {
-		ax.Role = &n.Role.Value
-	}
+	ax.Role = ariaRole(n)
 	if n.Value != nil {
 		switch v := n.Value.Value.(type) {
 		case string:
@@ -294,6 +292,45 @@ func axFromNode(n cdpAXNode) axInfo {
 		ax.NameSources = append(ax.NameSources, ns)
 	}
 	return ax
+}
+
+// internalRoleARIA maps the internal roles Chromium gives some elements (no
+// ARIA role, Chromium's own name instead) to the ARIA role reported in their
+// place. Most have no corresponding ARIA role (per HTML-AAM) and become
+// "generic"; the date and time inputs, which take typed text, become
+// "textbox" (as Playwright's role computation has them); <summary> and the
+// colour input, which act as buttons from the keyboard (toggle open, open a
+// picker), become "button".
+var internalRoleARIA = map[string]string{
+	"Date":               "textbox", // <input type=date>
+	"DateTime":           "textbox", // <input type=datetime-local|month|week>
+	"InputTime":          "textbox", // <input type=time>
+	"ColorWell":          "button",  // <input type=color>
+	"DisclosureTriangle": "button",  // <summary>
+	"LabelText":          "generic", // <label>
+	"Abbr":               "generic", // <abbr>
+	"Video":              "generic", // <video>
+	"Audio":              "generic", // <audio>
+	"Canvas":             "generic", // <canvas>
+	"Iframe":             "generic", // <iframe>
+	"PluginObject":       "generic", // <object>
+	"EmbeddedObject":     "generic", // <embed>
+}
+
+// ariaRole is n's role as an ARIA role: Chromium's role when it is one,
+// otherwise its internal role mapped by internalRoleARIA, and nil for an
+// internal role the map doesn't know.
+func ariaRole(n cdpAXNode) *string {
+	if n.Role == nil || n.Role.Value == "" {
+		return nil
+	}
+	if n.Role.Type != "internalRole" {
+		return &n.Role.Value
+	}
+	if r, ok := internalRoleARIA[n.Role.Value]; ok {
+		return &r
+	}
+	return nil
 }
 
 // axState reads the states and properties we report out of n's property
