@@ -130,31 +130,33 @@ func Focused(b *Browser) (*preset.FocusedElement, error) {
 	if err := json.Unmarshal(data, &fe); err != nil {
 		return nil, fmt.Errorf("session: reading the focused element: %w", err)
 	}
-	if err := addRoles(b, &fe); err != nil {
-		return nil, fmt.Errorf("session: reading the focused element's role: %w", err)
+	if err := addAX(b, &fe); err != nil {
+		return nil, fmt.Errorf("session: reading the focused element's accessibility node: %w", err)
 	}
 	return &fe, nil
 }
 
-// addRoles fills in the computed roles of the focused element and of its
-// active descendant from Chromium's accessibility tree: the explicit role
-// when valid, otherwise the implicit one ("generic" for a plain div). They
-// are read in a separate call from focusedElementJS, so a page that moves
+// addAX fills in the role, the accessible name and its sources of the focused
+// element and of its active descendant, from Chromium's accessibility tree.
+// They are read in a separate call from focusedElementJS, so a page that moves
 // focus in between could mismatch them; snapshots are taken once the page has
 // settled.
-func addRoles(b *Browser, fe *preset.FocusedElement) error {
+func addAX(b *Browser, fe *preset.FocusedElement) error {
 	s, err := b.context.NewCDPSession(b.active)
 	if err != nil {
 		return err
 	}
 	defer s.Detach()
-	if fe.Role, err = axRole(s, `document.activeElement`); err != nil {
+	ax, err := axNode(s, `document.activeElement`)
+	if err != nil {
 		return err
 	}
+	fe.Role, fe.Name, fe.NameSources = ax.Role, ax.Name, ax.NameSources
 	if ad := fe.ActiveDescendant; ad != nil && !ad.Missing {
-		if ad.Role, err = axRole(s, activeDescendantJS); err != nil {
+		if ax, err = axNode(s, activeDescendantJS); err != nil {
 			return err
 		}
+		ad.Role, ad.Name, ad.NameSources = ax.Role, ax.Name, ax.NameSources
 	}
 	return nil
 }
@@ -169,43 +171,97 @@ const activeDescendantJS = `(() => {
   return scope.getElementById(id) || document.getElementById(id);
 })()`
 
-// axRole evaluates expr to an element and returns its role in Chromium's
-// accessibility tree, nil when expr gives no element or the node is ignored
-// (not in the tree a screen reader gets).
-func axRole(s playwright.CDPSession, expr string) (*string, error) {
+// cdpAXNode is the part of a CDP Accessibility.AXNode we read.
+type cdpAXNode struct {
+	Ignored bool `json:"ignored"`
+	Role    *struct {
+		Value string `json:"value"`
+	} `json:"role"`
+	Name *struct {
+		Value   string `json:"value"`
+		Sources []struct {
+			Type         string `json:"type"`
+			Attribute    string `json:"attribute"`
+			NativeSource string `json:"nativeSource"`
+			Superseded   bool   `json:"superseded"`
+			Value        *struct {
+				Value string `json:"value"`
+			} `json:"value"`
+		} `json:"sources"`
+	} `json:"name"`
+}
+
+// axInfo is what we take from an accessibility node. The zero value means no
+// node, or one left out of the tree a screen reader gets.
+type axInfo struct {
+	Role        *string
+	Name        *string
+	NameSources []preset.NameSource
+}
+
+// axFromNode picks the role, name and name sources out of n. Only sources
+// that had a value are kept, once each, in Chromium's (precedence) order.
+func axFromNode(n cdpAXNode) axInfo {
+	if n.Ignored {
+		return axInfo{}
+	}
+	var ax axInfo
+	if n.Role != nil && n.Role.Value != "" {
+		ax.Role = &n.Role.Value
+	}
+	if n.Name == nil {
+		return ax
+	}
+	ax.Name = &n.Name.Value
+	seen := map[preset.NameSource]bool{}
+	for _, src := range n.Name.Sources {
+		if src.Value == nil {
+			continue
+		}
+		ns := preset.NameSource{From: src.Attribute, Value: src.Value.Value, Superseded: src.Superseded}
+		if ns.From == "" {
+			ns.From = src.NativeSource
+		}
+		if ns.From == "" {
+			ns.From = src.Type
+		}
+		key := preset.NameSource{From: ns.From, Value: ns.Value}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		ax.NameSources = append(ax.NameSources, ns)
+	}
+	return ax
+}
+
+// axNode evaluates expr to an element and returns what its node in Chromium's
+// accessibility tree says; the zero axInfo when expr gives no element.
+func axNode(s playwright.CDPSession, expr string) (axInfo, error) {
 	var ev struct {
 		Result struct {
 			ObjectID string `json:"objectId"`
 		} `json:"result"`
 	}
 	if err := cdpSend(s, "Runtime.evaluate", map[string]any{"expression": expr}, &ev); err != nil {
-		return nil, err
+		return axInfo{}, err
 	}
 	if ev.Result.ObjectID == "" {
-		return nil, nil
+		return axInfo{}, nil
 	}
 	var tree struct {
-		Nodes []struct {
-			Ignored bool `json:"ignored"`
-			Role    *struct {
-				Value string `json:"value"`
-			} `json:"role"`
-		} `json:"nodes"`
+		Nodes []cdpAXNode `json:"nodes"`
 	}
 	if err := cdpSend(s, "Accessibility.getPartialAXTree", map[string]any{
 		"objectId":       ev.Result.ObjectID,
 		"fetchRelatives": false,
 	}, &tree); err != nil {
-		return nil, err
+		return axInfo{}, err
 	}
 	if len(tree.Nodes) == 0 {
-		return nil, nil
+		return axInfo{}, nil
 	}
-	n := tree.Nodes[0]
-	if n.Ignored || n.Role == nil || n.Role.Value == "" {
-		return nil, nil
-	}
-	return &n.Role.Value, nil
+	return axFromNode(tree.Nodes[0]), nil
 }
 
 // cdpSend sends a CDP command and decodes its result into out.
@@ -224,15 +280,15 @@ func cdpSend(s playwright.CDPSession, method string, params map[string]any, out 
 	return nil
 }
 
-// focusedElementJS reads document.activeElement the way a screen reader would
-// announce it: text skips hidden subtrees and uses descendants' aria-label /
-// img alt; inline elements join without spaces; aria-labelledby and
-// aria-describedby resolve to the referenced text; <label>s (for= or
-// wrapping) and the enclosing fieldset's <legend> are read; native states
+// focusedElementJS reads what Chromium's accessibility tree doesn't give us
+// (the role and name come from there, see addAX) off document.activeElement:
+// text skips hidden subtrees and uses descendants' aria-label / img alt;
+// inline elements join without spaces; aria-describedby resolves to the
+// referenced text; the enclosing fieldset's <legend> is read; native states
 // (checked, selected, disabled, …) come from the DOM properties; composite
 // widgets (grid, listbox, menu, …) report their aria-activedescendant instead
-// of their own content. A field is included only when its source is present, so "" stays
-// distinct from absent.
+// of their own content. A field is included only when its source is present,
+// so "" stays distinct from absent.
 const focusedElementJS = `() => {
   const el = document.activeElement;
   if (!el || el === document.body) return null;
@@ -249,12 +305,9 @@ const focusedElementJS = `() => {
     const d = window.getComputedStyle(n).display;
     return d === 'inline' || d === 'contents';
   };
-  // skip, when given, is left out of the text: a <label> wrapping the focused
-  // <select> must not read out every option.
-  const srText = (root, skip) => {
+  const srText = (root) => {
     const parts = [];
     const walk = (n, isRoot) => {
-      if (n === skip) return;
       if (n.nodeType === Node.TEXT_NODE) { parts.push(n.data); return; }
       if (n.nodeType !== Node.ELEMENT_NODE) return;
       if (!isRoot && isHidden(n)) return;
@@ -300,9 +353,6 @@ const focusedElementJS = `() => {
   };
 
   const out = {};
-  const setAttr = (k, n) => { const v = el.getAttribute(n); if (v !== null) out[k] = v; };
-  setAttr('title', 'title');
-  setAttr('placeholder', 'placeholder');
   if (el.value !== undefined && el.value !== null) out.value = String(el.value);
   if (el.tagName === 'SELECT') {
     out.selectedText = Array.from(el.selectedOptions).map((o) => o.label.trim()).join(', ').slice(0, MAX);
@@ -314,14 +364,9 @@ const focusedElementJS = `() => {
     const text = srText(el);
     if (text) out.text = text;
   }
-  if (el.labels && el.labels.length) {
-    out.label = Array.from(el.labels).map((l) => srText(l, el)).filter(Boolean).join(' ').slice(0, MAX);
-  }
   const fieldset = el.parentElement && el.parentElement.closest('fieldset');
   const legend = fieldset && Array.from(fieldset.children).find((c) => c.tagName === 'LEGEND');
   if (legend) out.legend = srText(legend);
-  const lb = refText(el, 'aria-labelledby');
-  if (lb !== null) out.labelledBy = lb;
   const db = refText(el, 'aria-describedby');
   if (db !== null) out.describedBy = db;
   addStates(el, out);
@@ -336,7 +381,6 @@ const focusedElementJS = `() => {
     } else {
       const a = {};
       const t = srText(ad); if (t) a.text = t;
-      const alb = refText(ad, 'aria-labelledby'); if (alb !== null) a.labelledBy = alb;
       const adb = refText(ad, 'aria-describedby'); if (adb !== null) a.describedBy = adb;
       addStates(ad, a);
       const aa = ariaOf(ad); if (aa) a.aria = aa;
