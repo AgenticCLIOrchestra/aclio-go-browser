@@ -137,9 +137,9 @@ func Focused(b *Browser) (*preset.FocusedElement, error) {
 	return &fe, nil
 }
 
-// addAX fills in the role, the accessible name and its sources, and the value
-// of the focused element and of its active descendant, from Chromium's
-// accessibility tree.
+// addAX fills in the role, the accessible name and its sources, the value and
+// the states and properties of the focused element and of its active
+// descendant, from Chromium's accessibility tree.
 // They are read in a separate call from focusedElementJS, so a page that moves
 // focus in between could mismatch them; snapshots are taken once the page has
 // settled.
@@ -153,12 +153,16 @@ func addAX(b *Browser, fe *preset.FocusedElement) error {
 	if err != nil {
 		return err
 	}
-	fe.Role, fe.Name, fe.NameSources, fe.Value = ax.Role, ax.Name, ax.NameSources, ax.Value
+	// The DOM's required (see focusedElementJS) stands in when the tree leaves
+	// it out, as it does for a required checkbox.
+	domRequired := fe.Required
+	fe.Role, fe.Name, fe.NameSources, fe.Value, fe.AXState = ax.Role, ax.Name, ax.NameSources, ax.Value, ax.State
+	fe.Required = fe.Required || domRequired
 	if ad := fe.ActiveDescendant; ad != nil && !ad.Missing {
 		if ax, err = axNode(s, activeDescendantJS); err != nil {
 			return err
 		}
-		ad.Role, ad.Name, ad.NameSources, ad.Value = ax.Role, ax.Name, ax.NameSources, ax.Value
+		ad.Role, ad.Name, ad.NameSources, ad.Value, ad.AXState = ax.Role, ax.Name, ax.NameSources, ax.Value, ax.State
 	}
 	return nil
 }
@@ -194,6 +198,12 @@ type cdpAXNode struct {
 	Value *struct {
 		Value any `json:"value"` // a string, or a number for e.g. a slider
 	} `json:"value"`
+	Properties []struct {
+		Name  string `json:"name"`
+		Value struct {
+			Value any `json:"value"`
+		} `json:"value"`
+	} `json:"properties"`
 }
 
 // axInfo is what we take from an accessibility node. The zero value means no
@@ -203,11 +213,13 @@ type axInfo struct {
 	Name        *string
 	NameSources []preset.NameSource
 	Value       *string
+	State       preset.AXState
 }
 
-// axFromNode picks the role, name, name sources and value out of n. Only
-// sources that had a value are kept, once each, in Chromium's (precedence)
-// order. A numeric value (a slider, a spinbutton) is written out plainly.
+// axFromNode picks the role, name, name sources, value and states out of n.
+// Only sources that had a value are kept, once each, in Chromium's
+// (precedence) order. A numeric value (a slider, a spinbutton) is written out
+// plainly.
 func axFromNode(n cdpAXNode) axInfo {
 	if n.Ignored {
 		return axInfo{}
@@ -225,6 +237,7 @@ func axFromNode(n cdpAXNode) axInfo {
 			ax.Value = &s
 		}
 	}
+	ax.State = axState(n)
 	if n.Name == nil {
 		return ax
 	}
@@ -249,6 +262,90 @@ func axFromNode(n cdpAXNode) axInfo {
 		ax.NameSources = append(ax.NameSources, ns)
 	}
 	return ax
+}
+
+// axState reads the states and properties we report out of n's property
+// list. Properties Chromium leaves out stay unset; so do "false" for invalid
+// and an empty valuetext. Properties a screen reader doesn't announce
+// (focusable, editable, settable, live, …) are skipped.
+func axState(n cdpAXNode) preset.AXState {
+	var st preset.AXState
+	for _, p := range n.Properties {
+		v := p.Value.Value
+		str, isStr := v.(string)
+		b, isBool := v.(bool)
+		num, isNum := v.(float64)
+		switch p.Name {
+		case "checked":
+			if isStr {
+				st.Checked = &str
+			}
+		case "pressed":
+			if isStr {
+				st.Pressed = &str
+			}
+		case "selected":
+			if isBool {
+				st.Selected = &b
+			}
+		case "expanded":
+			if isBool {
+				st.Expanded = &b
+			}
+		case "disabled":
+			st.Disabled = isBool && b
+		case "readonly":
+			st.ReadOnly = isBool && b
+		case "required":
+			st.Required = isBool && b
+		case "invalid":
+			if isStr && str != "false" {
+				st.Invalid = &str
+			}
+		case "level":
+			if isNum {
+				l := int(num)
+				st.Level = &l
+			}
+		case "hasPopup":
+			if isStr && str != "false" {
+				st.HasPopup = &str
+			}
+		case "multiselectable":
+			st.Multiselectable = isBool && b
+		case "orientation":
+			if isStr {
+				st.Orientation = &str
+			}
+		case "valuemin":
+			if isNum {
+				st.ValueMin = &num
+			}
+		case "valuemax":
+			if isNum {
+				st.ValueMax = &num
+			}
+		case "valuetext":
+			if isStr && str != "" {
+				st.ValueText = &str
+			}
+		case "autocomplete":
+			if isStr && str != "none" {
+				st.Autocomplete = &str
+			}
+		case "keyshortcuts":
+			if isStr && str != "" {
+				st.KeyShortcuts = &str
+			}
+		case "roledescription":
+			if isStr && str != "" {
+				st.RoleDescription = &str
+			}
+		case "modal":
+			st.Modal = isBool && b
+		}
+	}
+	return st
 }
 
 // axNode evaluates expr to an element and returns what its node in Chromium's
@@ -297,12 +394,12 @@ func cdpSend(s playwright.CDPSession, method string, params map[string]any, out 
 }
 
 // focusedElementJS reads what Chromium's accessibility tree doesn't give us
-// (the role, name and value come from there, see addAX) off
-// document.activeElement:
-// text skips hidden subtrees and uses descendants' aria-label / img alt;
-// inline elements join without spaces; aria-describedby resolves to the
-// referenced text; the enclosing fieldset's <legend> is read; native states
-// (checked, selected, disabled, …) come from the DOM properties; composite
+// (the role, name, value, states and properties come from there, see addAX)
+// off document.activeElement: text skips hidden subtrees and uses
+// descendants' aria-label / img alt; inline elements join without spaces;
+// aria-describedby resolves to the referenced text; the enclosing fieldset's
+// <legend> is read; required stands in for the tree's when it leaves it out;
+// only the aria-* attributes no other field covers are kept; composite
 // widgets (grid, listbox, menu, …) report their aria-activedescendant instead
 // of their own content. A field is included only when its source is present,
 // so "" stays distinct from absent.
@@ -351,22 +448,22 @@ const focusedElementJS = `() => {
     const texts = ids.split(/\s+/).map((id) => { const t = byId(id); return t ? srText(t) : ''; }).filter(Boolean);
     return texts.length ? texts.join(' ').slice(0, MAX) : '';
   };
+  // aria-* attributes another field already covers: the name and its sources,
+  // the value, the states and properties from the accessibility tree,
+  // describedBy and activeDescendant. The rest (aria-current, aria-valuetext,
+  // aria-setsize, aria-controls, …) the tree doesn't report, so they stay.
+  const COVERED = new Set([
+    'aria-label', 'aria-labelledby', 'aria-describedby', 'aria-activedescendant',
+    'aria-valuenow', 'aria-checked', 'aria-pressed', 'aria-selected', 'aria-expanded',
+    'aria-disabled', 'aria-readonly', 'aria-required', 'aria-invalid', 'aria-level',
+    'aria-haspopup', 'aria-multiselectable', 'aria-orientation', 'aria-valuemin',
+    'aria-valuemax', 'aria-autocomplete', 'aria-keyshortcuts', 'aria-roledescription',
+    'aria-modal',
+  ]);
   const ariaOf = (n) => {
     const aria = {};
-    for (const a of n.attributes) if (a.name.startsWith('aria-')) aria[a.name] = a.value;
+    for (const a of n.attributes) if (a.name.startsWith('aria-') && !COVERED.has(a.name)) aria[a.name] = a.value;
     return Object.keys(aria).length ? aria : null;
-  };
-  // Native states, from the DOM properties so they reflect user interaction.
-  // checked / selected only where the element has them (false is reported).
-  const addStates = (n, o) => {
-    if (n.tagName === 'INPUT' && (n.type === 'checkbox' || n.type === 'radio')) {
-      o.checked = n.checked;
-      if (n.indeterminate) o.indeterminate = true;
-    }
-    if (n.tagName === 'OPTION') o.selected = n.selected;
-    if (n.matches(':disabled')) o.disabled = true;
-    if (n.required === true) o.required = true;
-    if (n.readOnly === true) o.readOnly = true;
   };
 
   const out = {};
@@ -388,7 +485,9 @@ const focusedElementJS = `() => {
   if (legend) out.legend = srText(legend);
   const db = refText(el, 'aria-describedby');
   if (db !== null) out.describedBy = db;
-  addStates(el, out);
+  // Chromium's accessibility tree leaves required out for some controls (e.g.
+  // a required checkbox); this stands in for it then (see addAX).
+  if (el.required === true || el.getAttribute('aria-required') === 'true') out.required = true;
   const aria = ariaOf(el);
   if (aria) out.aria = aria;
 
@@ -401,7 +500,6 @@ const focusedElementJS = `() => {
       const a = {};
       const t = srText(ad); if (t) a.text = t;
       const adb = refText(ad, 'aria-describedby'); if (adb !== null) a.describedBy = adb;
-      addStates(ad, a);
       const aa = ariaOf(ad); if (aa) a.aria = aa;
       out.activeDescendant = a;
     }
