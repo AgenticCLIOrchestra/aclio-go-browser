@@ -81,3 +81,50 @@ func TestAXFromNodeValue(t *testing.T) {
 		t.Errorf("no value = %q, want nil", *ax.Value)
 	}
 }
+
+// Properties are read into AXState with their types; "false" invalid, empty
+// valuetext, "none" autocomplete and unannounced properties stay unset.
+func TestAXState(t *testing.T) {
+	const raw = `{"properties":[
+		{"name":"focusable","value":{"type":"booleanOrUndefined","value":true}},
+		{"name":"checked","value":{"type":"tristate","value":"mixed"}},
+		{"name":"pressed","value":{"type":"tristate","value":"false"}},
+		{"name":"selected","value":{"type":"booleanOrUndefined","value":false}},
+		{"name":"expanded","value":{"type":"booleanOrUndefined","value":false}},
+		{"name":"disabled","value":{"type":"boolean","value":true}},
+		{"name":"readonly","value":{"type":"boolean","value":false}},
+		{"name":"required","value":{"type":"boolean","value":true}},
+		{"name":"invalid","value":{"type":"token","value":"spelling"}},
+		{"name":"level","value":{"type":"integer","value":3}},
+		{"name":"hasPopup","value":{"type":"token","value":"menu"}},
+		{"name":"multiselectable","value":{"type":"boolean","value":true}},
+		{"name":"orientation","value":{"type":"token","value":"vertical"}},
+		{"name":"valuemin","value":{"type":"number","value":0}},
+		{"name":"valuemax","value":{"type":"number","value":100}},
+		{"name":"valuetext","value":{"type":"string","value":"30 percent"}},
+		{"name":"autocomplete","value":{"type":"token","value":"list"}},
+		{"name":"keyshortcuts","value":{"type":"string","value":"Alt+S"}},
+		{"name":"roledescription","value":{"type":"string","value":"slide"}},
+		{"name":"modal","value":{"type":"boolean","value":true}}]}`
+	var n cdpAXNode
+	if err := json.Unmarshal([]byte(raw), &n); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := json.Marshal(axState(n))
+	const want = `{"checked":"mixed","pressed":"false","selected":false,"expanded":false,"disabled":true,"required":true,"invalid":"spelling","level":3,"hasPopup":"menu","multiselectable":true,"orientation":"vertical","valueMin":0,"valueMax":100,"valueText":"30 percent","autocomplete":"list","keyShortcuts":"Alt+S","roleDescription":"slide","modal":true}`
+	if string(got) != want {
+		t.Errorf("axState =\n%s\nwant\n%s", got, want)
+	}
+
+	n = cdpAXNode{}
+	if err := json.Unmarshal([]byte(`{"properties":[
+		{"name":"invalid","value":{"type":"token","value":"false"}},
+		{"name":"valuetext","value":{"type":"string","value":""}},
+		{"name":"autocomplete","value":{"type":"token","value":"none"}},
+		{"name":"editable","value":{"type":"token","value":"plaintext"}}]}`), &n); err != nil {
+		t.Fatal(err)
+	}
+	if got := axState(n); !reflect.DeepEqual(got, preset.AXState{}) {
+		t.Errorf("axState = %+v, want zero", got)
+	}
+}

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-11-18
+
+### Added
+- `preset.AXState`, an element's states and properties as Chromium's own accessibility tree reports them, embedded in `FocusedElement` and `ActiveDescendant` (so its fields sit at their top level in JSON): `checked` and `pressed` (`"true"`, `"false"` or `"mixed"`), `selected`, `expanded`, `disabled`, `readOnly`, `required`, `invalid` (`"true"`, `"grammar"` or `"spelling"`), `level`, `hasPopup`, `multiselectable`, `orientation`, `valueMin`, `valueMax`, `valueText`, `autocomplete`, `keyShortcuts`, `roleDescription` and `modal`. Native and ARIA markup give the same states (a native indeterminate checkbox and `aria-checked="mixed"` are both `checked: "mixed"`), and they reflect what the user did. Chromium leaves `required` out for some controls (e.g. a required checkbox), so the DOM's `required` / `aria-required` stands in then. `DefaultInitialPrompt` explains the states to the agent
+
+### Changed
+- `Checked` is now a `*string` (`"true"`, `"false"` or `"mixed"`) instead of a `*bool`, and covers `aria-checked` as well as native checkboxes and radios. `Selected`, `Disabled`, `ReadOnly` and `Required` now come from the accessibility tree, so they cover ARIA too (`aria-selected`, `aria-disabled`, …)
+- `Aria` keeps only the aria-* attributes no other field covers (e.g. `aria-current`, `aria-valuetext`, `aria-setsize` / `aria-posinset`, `aria-controls`), which the accessibility tree doesn't report. Those it covers (`aria-label`, `aria-labelledby`, `aria-describedby`, `aria-activedescendant`, `aria-valuenow`, `aria-checked`, `aria-expanded`, …) are gone from it
+
+### Removed
+- `preset.FocusedElement.Indeterminate` and `preset.ActiveDescendant.Indeterminate`: a mixed checkbox is now `checked: "mixed"`
+
 ## [0.10.0] - 2026-11-18
 
 ### Added
@@ -97,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.11.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.7.0...v0.8.0

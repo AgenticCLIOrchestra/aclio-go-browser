@@ -48,27 +48,25 @@ type Tab struct {
 // checkbox, a radio, a button, a link. A list-style <select> (multiple, or
 // size > 1) has no value; its selected options are in SelectedText.
 //
-// The native states are read off the DOM properties, not the attributes, so
-// they reflect what the user did (a radio clicked after load is Checked).
-// Checked and Selected are set only on elements that have them (a checkbox or
-// radio, an <option>), where false means unchecked / unselected; the other
-// flags are omitted when false.
+// The states and properties in AXState (checked, expanded, disabled, level,
+// …) come from Chromium's accessibility tree too, so native and ARIA ones are
+// the same (a native indeterminate checkbox and aria-checked="mixed" are both
+// Checked "mixed") and they reflect what the user did.
+//
+// Aria holds only the aria-* attributes that none of the fields above cover
+// (e.g. aria-current, aria-valuetext, aria-setsize / aria-posinset,
+// aria-controls), since Chromium's accessibility tree doesn't report them.
 type FocusedElement struct {
-	Role             *string           `json:"role,omitempty"`             // computed role, from Chromium's accessibility tree
-	Name             *string           `json:"name,omitempty"`             // accessible name, from Chromium's accessibility tree; "" when none
-	NameSources      []NameSource      `json:"nameSources,omitempty"`      // the sources that had a value, in precedence order
-	Text             *string           `json:"text,omitempty"`             // screen-reader text content
-	Value            *string           `json:"value,omitempty"`            // value, from Chromium's accessibility tree
-	SelectedText     *string           `json:"selectedText,omitempty"`     // a list-style <select>'s selected options, ", "-joined
-	Legend           *string           `json:"legend,omitempty"`           // legend of the nearest enclosing <fieldset>
-	DescribedBy      *string           `json:"describedBy,omitempty"`      // text of the aria-describedby targets
-	Checked          *bool             `json:"checked,omitempty"`          // checkbox / radio only
-	Indeterminate    bool              `json:"indeterminate,omitempty"`    // checkbox in the mixed state
-	Selected         *bool             `json:"selected,omitempty"`         // <option> only
-	Disabled         bool              `json:"disabled,omitempty"`         // :disabled, incl. via a disabled fieldset
-	Required         bool              `json:"required,omitempty"`         // required form control
-	ReadOnly         bool              `json:"readOnly,omitempty"`         // read-only input / textarea
-	Aria             map[string]string `json:"aria,omitempty"`             // every aria-* attribute
+	Role             *string           `json:"role,omitempty"`         // computed role, from Chromium's accessibility tree
+	Name             *string           `json:"name,omitempty"`         // accessible name, from Chromium's accessibility tree; "" when none
+	NameSources      []NameSource      `json:"nameSources,omitempty"`  // the sources that had a value, in precedence order
+	Text             *string           `json:"text,omitempty"`         // screen-reader text content
+	Value            *string           `json:"value,omitempty"`        // value, from Chromium's accessibility tree
+	SelectedText     *string           `json:"selectedText,omitempty"` // a list-style <select>'s selected options, ", "-joined
+	Legend           *string           `json:"legend,omitempty"`       // legend of the nearest enclosing <fieldset>
+	DescribedBy      *string           `json:"describedBy,omitempty"`  // text of the aria-describedby targets
+	AXState                            // states and properties, from Chromium's accessibility tree
+	Aria             map[string]string `json:"aria,omitempty"`             // aria-* attributes no other field covers
 	ActiveDescendant *ActiveDescendant `json:"activeDescendant,omitempty"` // element aria-activedescendant points at
 }
 
@@ -85,24 +83,50 @@ type NameSource struct {
 	Superseded bool   `json:"superseded,omitempty"`
 }
 
+// AXState is an element's states and properties as Chromium's accessibility
+// tree reports them: what a screen reader is told about it besides its role,
+// name and value. Embedded in FocusedElement and ActiveDescendant, its fields
+// appear at their top level in JSON. A field is set only when Chromium reports
+// it: pointers for the ones where false or 0 is worth saying (an unchecked
+// checkbox, a collapsed menu, a minimum of 0), plain bools omitted when false.
+// The one exception: Required is also set from the DOM (the required
+// attribute or aria-required="true") when the tree leaves it out, as it does
+// for a required checkbox.
+type AXState struct {
+	Checked         *string  `json:"checked,omitempty"`         // "true", "false" or "mixed": checkboxes, radios, switches, …
+	Pressed         *string  `json:"pressed,omitempty"`         // "true", "false" or "mixed": toggle buttons
+	Selected        *bool    `json:"selected,omitempty"`        // options, tabs, rows, …
+	Expanded        *bool    `json:"expanded,omitempty"`        // comboboxes, menu buttons, disclosures, tree items, …
+	Disabled        bool     `json:"disabled,omitempty"`        // native or aria-disabled, incl. via a disabled fieldset
+	ReadOnly        bool     `json:"readOnly,omitempty"`        // read-only field
+	Required        bool     `json:"required,omitempty"`        // required field (also from the DOM, see above)
+	Invalid         *string  `json:"invalid,omitempty"`         // "true", "grammar" or "spelling"; omitted when valid
+	Level           *int     `json:"level,omitempty"`           // heading level; list / tree nesting depth
+	HasPopup        *string  `json:"hasPopup,omitempty"`        // "menu", "listbox", "tree", "grid", "dialog" or "true"
+	Multiselectable bool     `json:"multiselectable,omitempty"` // listboxes, grids, … that allow several selected
+	Orientation     *string  `json:"orientation,omitempty"`     // "horizontal" or "vertical"
+	ValueMin        *float64 `json:"valueMin,omitempty"`        // range widgets: sliders, spinbuttons, progress bars, …
+	ValueMax        *float64 `json:"valueMax,omitempty"`        // range widgets
+	ValueText       *string  `json:"valueText,omitempty"`       // range widgets' human-readable value, when Chromium has one
+	Autocomplete    *string  `json:"autocomplete,omitempty"`    // "list", "inline" or "both"
+	KeyShortcuts    *string  `json:"keyShortcuts,omitempty"`    // aria-keyshortcuts, e.g. "Alt+S"
+	RoleDescription *string  `json:"roleDescription,omitempty"` // aria-roledescription, spoken instead of the role
+	Modal           bool     `json:"modal,omitempty"`           // modal dialogs
+}
+
 // ActiveDescendant is the item a focused composite widget designates via
 // aria-activedescendant: what a screen reader announces while DOM focus stays
 // on the container. Missing is set when the id resolves to no element. Role,
-// Name, NameSources, Value and the native states follow the same rules as on
+// Name, NameSources, Value, AXState and Aria follow the same rules as on
 // FocusedElement.
 type ActiveDescendant struct {
-	Role          *string           `json:"role,omitempty"`
-	Name          *string           `json:"name,omitempty"`
-	NameSources   []NameSource      `json:"nameSources,omitempty"`
-	Value         *string           `json:"value,omitempty"`
-	Text          *string           `json:"text,omitempty"`
-	DescribedBy   *string           `json:"describedBy,omitempty"`
-	Checked       *bool             `json:"checked,omitempty"`
-	Indeterminate bool              `json:"indeterminate,omitempty"`
-	Selected      *bool             `json:"selected,omitempty"`
-	Disabled      bool              `json:"disabled,omitempty"`
-	Required      bool              `json:"required,omitempty"`
-	ReadOnly      bool              `json:"readOnly,omitempty"`
-	Aria          map[string]string `json:"aria,omitempty"`
-	Missing       bool              `json:"missing,omitempty"`
+	Role        *string      `json:"role,omitempty"`
+	Name        *string      `json:"name,omitempty"`
+	NameSources []NameSource `json:"nameSources,omitempty"`
+	Value       *string      `json:"value,omitempty"`
+	Text        *string      `json:"text,omitempty"`
+	DescribedBy *string      `json:"describedBy,omitempty"`
+	AXState
+	Aria    map[string]string `json:"aria,omitempty"`
+	Missing bool              `json:"missing,omitempty"`
 }
