@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-11-18
+
+### Added
+- `preset.FocusedElement.Name` / `NameSources` and `preset.ActiveDescendant.Name` / `NameSources`, read from Chromium's own accessibility tree like `Role`. `name` is the one accessible name a screen reader announces, as Chromium computes it in the spec's order of precedence (`aria-labelledby`, `aria-label`, a `<label>`, contents, `title`, `placeholder`, …); `""` means the element has no accessible name. `nameSources` lists every source that had a value, in that order, as `{from, value, superseded}`, so it shows where the name came from and what it outranked (e.g. `{"from":"labelfor","value":"Asc"}`, then `{"from":"title","value":"t","superseded":true}`). Both are omitted when the element is left out of the accessibility tree
+- `preset.NameSource`
+- `DefaultInitialPrompt` explains `role`, `name` and `nameSources` to the agent
+
+### Removed
+- `preset.FocusedElement.Label`, `LabelledBy`, `Title` and `Placeholder`, and `preset.ActiveDescendant.LabelledBy`. Each one's value is in `NameSources` whenever it is present (`labelfor` / `labelwrapped`, `aria-labelledby`, `title`, `placeholder`), outranked or not
+
 ## [0.8.0] - 2026-11-18
 
 ### Removed
@@ -78,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.9.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.5.0...v0.6.0
