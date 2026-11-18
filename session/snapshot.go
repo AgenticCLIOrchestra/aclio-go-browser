@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -139,7 +140,8 @@ func Focused(b *Browser) (*preset.FocusedElement, error) {
 
 // addAX fills in the role, the accessible name and its sources, the value and
 // the states and properties of the focused element and of its active
-// descendant, from Chromium's accessibility tree. An element the tree ignores
+// descendant, and the focused element's context (its announced ancestors),
+// from Chromium's accessibility tree. An element the tree ignores
 // is reduced to that fact and its reasons.
 // They are read in a separate call from focusedElementJS, so a page that moves
 // focus in between could mismatch them; snapshots are taken once the page has
@@ -150,7 +152,7 @@ func addAX(b *Browser, fe *preset.FocusedElement) error {
 		return err
 	}
 	defer s.Detach()
-	ax, err := axNode(s, `document.activeElement`)
+	ax, err := axNode(s, `document.activeElement`, true)
 	if err != nil {
 		return err
 	}
@@ -164,8 +166,9 @@ func addAX(b *Browser, fe *preset.FocusedElement) error {
 	domRequired := fe.Required
 	fe.Role, fe.Name, fe.NameSources, fe.Value, fe.AXState = ax.Role, ax.Name, ax.NameSources, ax.Value, ax.State
 	fe.Required = fe.Required || domRequired
+	fe.Context = ax.Context
 	if ad := fe.ActiveDescendant; ad != nil && !ad.Missing {
-		if ax, err = axNode(s, activeDescendantJS); err != nil {
+		if ax, err = axNode(s, activeDescendantJS, false); err != nil {
 			return err
 		}
 		if ax.State.Ignored {
@@ -189,11 +192,14 @@ const activeDescendantJS = `(() => {
 
 // cdpAXNode is the part of a CDP Accessibility.AXNode we read.
 type cdpAXNode struct {
-	Ignored        bool `json:"ignored"`
+	NodeID         string `json:"nodeId"`
+	ParentID       string `json:"parentId"`
+	Ignored        bool   `json:"ignored"`
 	IgnoredReasons []struct {
 		Name string `json:"name"`
 	} `json:"ignoredReasons"`
 	Role *struct {
+		Type  string `json:"type"` // "role", or "internalRole" for Chromium's own
 		Value string `json:"value"`
 	} `json:"role"`
 	Name *struct {
@@ -228,6 +234,7 @@ type axInfo struct {
 	NameSources []preset.NameSource
 	Value       *string
 	State       preset.AXState
+	Context     []preset.ContextItem
 }
 
 // axFromNode picks the role, name, name sources, value and states out of n.
@@ -366,9 +373,36 @@ func axState(n cdpAXNode) preset.AXState {
 	return st
 }
 
+// axContext walks from the node with id up through its ancestors in nodes and
+// returns the ones a screen reader may announce as context, outermost first:
+// not ignored, not a generic wrapper or role "none", and not one of
+// Chromium's internal roles (which include the document root).
+func axContext(nodes []cdpAXNode, id string) []preset.ContextItem {
+	byID := make(map[string]cdpAXNode, len(nodes))
+	for _, n := range nodes {
+		byID[n.NodeID] = n
+	}
+	var ctx []preset.ContextItem
+	seen := map[string]bool{id: true}
+	for n, ok := byID[byID[id].ParentID]; ok && !seen[n.NodeID]; n, ok = byID[n.ParentID] {
+		seen[n.NodeID] = true
+		if n.Ignored || n.Role == nil || n.Role.Type != "role" || n.Role.Value == "generic" || n.Role.Value == "none" {
+			continue
+		}
+		item := preset.ContextItem{Role: n.Role.Value}
+		if n.Name != nil {
+			item.Name = n.Name.Value
+		}
+		ctx = append(ctx, item)
+	}
+	slices.Reverse(ctx)
+	return ctx
+}
+
 // axNode evaluates expr to an element and returns what its node in Chromium's
-// accessibility tree says; the zero axInfo when expr gives no element.
-func axNode(s playwright.CDPSession, expr string) (axInfo, error) {
+// accessibility tree says; the zero axInfo when expr gives no element. With
+// withContext, it also fetches the node's ancestors for axInfo.Context.
+func axNode(s playwright.CDPSession, expr string, withContext bool) (axInfo, error) {
 	var ev struct {
 		Result struct {
 			ObjectID string `json:"objectId"`
@@ -392,7 +426,23 @@ func axNode(s playwright.CDPSession, expr string) (axInfo, error) {
 	if len(tree.Nodes) == 0 {
 		return axInfo{}, nil
 	}
-	return axFromNode(tree.Nodes[0]), nil
+	ax := axFromNode(tree.Nodes[0])
+	if !withContext || ax.State.Ignored {
+		return ax, nil
+	}
+	// Fetched separately: with relatives, which node is the requested one
+	// isn't specified, so it is found by the id from the call above.
+	var rel struct {
+		Nodes []cdpAXNode `json:"nodes"`
+	}
+	if err := cdpSend(s, "Accessibility.getPartialAXTree", map[string]any{
+		"objectId":       ev.Result.ObjectID,
+		"fetchRelatives": true,
+	}, &rel); err != nil {
+		return axInfo{}, err
+	}
+	ax.Context = axContext(rel.Nodes, tree.Nodes[0].NodeID)
+	return ax, nil
 }
 
 // cdpSend sends a CDP command and decodes its result into out.

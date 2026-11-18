@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-11-18
+
+### Added
+- `preset.FocusedElement.Context` and `preset.ContextItem`: the focused element's ancestors in Chromium's own accessibility tree, outermost first, as `{role, name}`. These are the landmarks, groups, lists, tables and dialogs a screen reader announces as context when focus moves into them, e.g. `main`, `form` "Prefs", then `group` "Sort by" for a radio in a fieldset, or `banner`, `navigation` "Primary", `list`, `listitem` for a nav link. Generic wrappers, ignored nodes and the document itself are left out. A screen reader announces only the contexts focus has just entered; `Context` has the whole chain every turn. The active descendant has no `Context` of its own (its context is the focused container). `DefaultInitialPrompt` explains `context` to the agent
+
 ## [0.12.0] - 2026-11-18
 
 ### Added
@@ -118,6 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.13.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.9.0...v0.10.0
