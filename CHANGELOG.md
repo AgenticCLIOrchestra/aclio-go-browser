@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-11-18
+
+### Added
+- `preset.ActiveDescendant.Value`, following the same rules as `FocusedElement.Value`
+
+### Changed
+- The focused element's `value` now comes from Chromium's own accessibility tree, like `role` and `name`: it is the value a screen reader announces. That is the text typed into a field (masked for a password), a drop-down `<select>`'s selected text (`Large`, not its option's `value` attribute), or a slider's, spinbutton's or progress bar's number, written out (e.g. `"7"`). It is omitted when the element has none: an empty field, a checkbox, a radio, a button or a link, so a checkbox's meaningless `"on"` and a button's `""` are gone. `DefaultInitialPrompt` explains `value` to the agent
+- `selectedText` is now set only for a list-style `<select>` (`multiple`, or `size` > 1), which has no value in the accessibility tree. For a drop-down `<select>` it repeated `value` and is gone
+
 ## [0.9.0] - 2026-11-18
 
 ### Added
@@ -88,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.10.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.6.0...v0.7.0

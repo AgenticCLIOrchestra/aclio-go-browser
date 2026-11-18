@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/agenticcliorchestra/aclio-go-browser/engine"
@@ -136,8 +137,9 @@ func Focused(b *Browser) (*preset.FocusedElement, error) {
 	return &fe, nil
 }
 
-// addAX fills in the role, the accessible name and its sources of the focused
-// element and of its active descendant, from Chromium's accessibility tree.
+// addAX fills in the role, the accessible name and its sources, and the value
+// of the focused element and of its active descendant, from Chromium's
+// accessibility tree.
 // They are read in a separate call from focusedElementJS, so a page that moves
 // focus in between could mismatch them; snapshots are taken once the page has
 // settled.
@@ -151,12 +153,12 @@ func addAX(b *Browser, fe *preset.FocusedElement) error {
 	if err != nil {
 		return err
 	}
-	fe.Role, fe.Name, fe.NameSources = ax.Role, ax.Name, ax.NameSources
+	fe.Role, fe.Name, fe.NameSources, fe.Value = ax.Role, ax.Name, ax.NameSources, ax.Value
 	if ad := fe.ActiveDescendant; ad != nil && !ad.Missing {
 		if ax, err = axNode(s, activeDescendantJS); err != nil {
 			return err
 		}
-		ad.Role, ad.Name, ad.NameSources = ax.Role, ax.Name, ax.NameSources
+		ad.Role, ad.Name, ad.NameSources, ad.Value = ax.Role, ax.Name, ax.NameSources, ax.Value
 	}
 	return nil
 }
@@ -189,6 +191,9 @@ type cdpAXNode struct {
 			} `json:"value"`
 		} `json:"sources"`
 	} `json:"name"`
+	Value *struct {
+		Value any `json:"value"` // a string, or a number for e.g. a slider
+	} `json:"value"`
 }
 
 // axInfo is what we take from an accessibility node. The zero value means no
@@ -197,10 +202,12 @@ type axInfo struct {
 	Role        *string
 	Name        *string
 	NameSources []preset.NameSource
+	Value       *string
 }
 
-// axFromNode picks the role, name and name sources out of n. Only sources
-// that had a value are kept, once each, in Chromium's (precedence) order.
+// axFromNode picks the role, name, name sources and value out of n. Only
+// sources that had a value are kept, once each, in Chromium's (precedence)
+// order. A numeric value (a slider, a spinbutton) is written out plainly.
 func axFromNode(n cdpAXNode) axInfo {
 	if n.Ignored {
 		return axInfo{}
@@ -208,6 +215,15 @@ func axFromNode(n cdpAXNode) axInfo {
 	var ax axInfo
 	if n.Role != nil && n.Role.Value != "" {
 		ax.Role = &n.Role.Value
+	}
+	if n.Value != nil {
+		switch v := n.Value.Value.(type) {
+		case string:
+			ax.Value = &v
+		case float64:
+			s := strconv.FormatFloat(v, 'f', -1, 64)
+			ax.Value = &s
+		}
 	}
 	if n.Name == nil {
 		return ax
@@ -281,7 +297,8 @@ func cdpSend(s playwright.CDPSession, method string, params map[string]any, out 
 }
 
 // focusedElementJS reads what Chromium's accessibility tree doesn't give us
-// (the role and name come from there, see addAX) off document.activeElement:
+// (the role, name and value come from there, see addAX) off
+// document.activeElement:
 // text skips hidden subtrees and uses descendants' aria-label / img alt;
 // inline elements join without spaces; aria-describedby resolves to the
 // referenced text; the enclosing fieldset's <legend> is read; native states
@@ -353,13 +370,15 @@ const focusedElementJS = `() => {
   };
 
   const out = {};
-  if (el.value !== undefined && el.value !== null) out.value = String(el.value);
-  if (el.tagName === 'SELECT') {
+  // A list-style <select> has no value in the accessibility tree (a
+  // drop-down's value is its selected text), so its selection is read here.
+  if (el.tagName === 'SELECT' && (el.multiple || el.size > 1)) {
     out.selectedText = Array.from(el.selectedOptions).map((o) => o.label.trim()).join(', ').slice(0, MAX);
   }
 
   const role = (el.getAttribute('role') || '').trim().toLowerCase();
-  // A <select>'s options are not its text: selectedText says what is chosen.
+  // A <select>'s options are not its text: value / selectedText say what is
+  // chosen.
   if (!COMPOSITE.has(role) && el.tagName !== 'SELECT') {
     const text = srText(el);
     if (text) out.text = text;
