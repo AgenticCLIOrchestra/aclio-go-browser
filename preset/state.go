@@ -53,6 +53,14 @@ type Tab struct {
 // the same (a native indeterminate checkbox and aria-checked="mixed" are both
 // Checked "mixed") and they reflect what the user did.
 //
+// Context is the focused element's ancestors in Chromium's accessibility tree,
+// outermost first: the landmarks, groups, lists, tables, dialogs, … a screen
+// reader announces as context when focus moves into them (e.g. main, form
+// "Prefs", group "Sort by" for a radio in a fieldset). Plain wrappers
+// (generic), nodes the tree ignores and the document itself are left out. A
+// screen reader announces only the ones focus has just entered; Context has
+// them all, every turn.
+//
 // Aria holds only the aria-* attributes that none of the fields above cover
 // (e.g. aria-current, aria-valuetext, aria-setsize / aria-posinset,
 // aria-controls), since Chromium's accessibility tree doesn't report them.
@@ -65,6 +73,7 @@ type FocusedElement struct {
 	SelectedText     *string           `json:"selectedText,omitempty"` // a list-style <select>'s selected options, ", "-joined
 	Legend           *string           `json:"legend,omitempty"`       // legend of the nearest enclosing <fieldset>
 	DescribedBy      *string           `json:"describedBy,omitempty"`  // text of the aria-describedby targets
+	Context          []ContextItem     `json:"context,omitempty"`      // ancestors a screen reader may announce, outermost first
 	AXState                            // states and properties, from Chromium's accessibility tree
 	Aria             map[string]string `json:"aria,omitempty"`             // aria-* attributes no other field covers
 	ActiveDescendant *ActiveDescendant `json:"activeDescendant,omitempty"` // element aria-activedescendant points at
@@ -122,6 +131,13 @@ type AXState struct {
 	Modal           bool     `json:"modal,omitempty"`           // modal dialogs
 	Ignored         bool     `json:"ignored,omitempty"`         // left out of the tree: a screen reader gets nothing for it
 	IgnoredReasons  []string `json:"ignoredReasons,omitempty"`  // why, e.g. "ariaHiddenElement", "notRendered"
+}
+
+// ContextItem is one ancestor in FocusedElement.Context: its role and, when it
+// has one, its accessible name, both from Chromium's accessibility tree.
+type ContextItem struct {
+	Role string `json:"role"`
+	Name string `json:"name,omitempty"`
 }
 
 // ActiveDescendant is the item a focused composite widget designates via

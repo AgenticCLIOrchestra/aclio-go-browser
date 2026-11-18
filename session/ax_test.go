@@ -133,3 +133,34 @@ func TestAXState(t *testing.T) {
 		t.Errorf("axState = %+v, want zero", got)
 	}
 }
+
+// Context is the ancestors, outermost first, without ignored nodes, generic
+// wrappers, role "none" or internal roles (the document root); a parent loop
+// can't hang it.
+func TestAXContext(t *testing.T) {
+	const raw = `[
+		{"nodeId":"1","role":{"type":"internalRole","value":"RootWebArea"},"name":{"value":"Shop"}},
+		{"nodeId":"2","parentId":"1","ignored":true,"role":{"type":"role","value":"none"}},
+		{"nodeId":"3","parentId":"2","role":{"type":"role","value":"main"},"name":{"value":""}},
+		{"nodeId":"4","parentId":"3","role":{"type":"role","value":"form"},"name":{"value":"Prefs"}},
+		{"nodeId":"5","parentId":"4","role":{"type":"role","value":"group"},"name":{"value":"Sort by"}},
+		{"nodeId":"6","parentId":"5","role":{"type":"role","value":"generic"},"name":{"value":""}},
+		{"nodeId":"7","parentId":"6","role":{"type":"role","value":"radio"},"name":{"value":"Asc"}},
+		{"nodeId":"8","parentId":"7","role":{"type":"internalRole","value":"StaticText"}}]`
+	var nodes []cdpAXNode
+	if err := json.Unmarshal([]byte(raw), &nodes); err != nil {
+		t.Fatal(err)
+	}
+	want := []preset.ContextItem{{Role: "main"}, {Role: "form", Name: "Prefs"}, {Role: "group", Name: "Sort by"}}
+	if got := axContext(nodes, "7"); !reflect.DeepEqual(got, want) {
+		t.Errorf("axContext = %+v, want %+v", got, want)
+	}
+	if got := axContext(nodes, "1"); got != nil {
+		t.Errorf("root context = %+v, want none", got)
+	}
+
+	loop := []cdpAXNode{{NodeID: "a", ParentID: "b"}, {NodeID: "b", ParentID: "a"}}
+	if got := axContext(loop, "a"); got != nil {
+		t.Errorf("loop context = %+v", got)
+	}
+}

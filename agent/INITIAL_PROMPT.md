@@ -21,7 +21,10 @@ its readable content, `legend` is the text of its fieldset's legend,
 `disabled`, `required`, `invalid`, `level` and `hasPopup` are the states and
 properties a screen reader announces, `aria` holds any other aria-* attributes
 (e.g. `aria-current`), and for composite widgets (grid, listbox, menu, …)
-`activeDescendant` is the item a screen reader announces as active. An element
+`activeDescendant` is the item a screen reader announces as active. `context`
+lists the landmarks, groups, lists, tables and dialogs it is inside, outermost
+first (e.g. `main`, then `form` "Prefs", then `group` "Sort by"), which a
+screen reader announces as focus moves into them. An element
 with `ignored: true` is hidden from screen readers, so a screen reader
 announces nothing for it; `ignoredReasons` says why.
 
