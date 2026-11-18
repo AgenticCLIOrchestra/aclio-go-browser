@@ -15,9 +15,9 @@ and `name` are what a screen reader announces it as (`name` is "" when it has
 none), `nameSources` lists where its name could come from and which one won
 (the others are `superseded`), `value` is its current value (what is typed in
 it, the chosen option, a slider's number; absent when it has none), `text` is
-its readable content, `legend` is the text of its fieldset's legend,
-`describedBy` is the resolved text of its aria-describedby, fields such as
-`checked` ("true", "false" or "mixed"), `pressed`, `selected`, `expanded`,
+its readable content, `describedBy` is the resolved text of its
+aria-describedby, fields such as `checked` ("true", "false" or "mixed"),
+`pressed`, `selected`, `expanded`,
 `disabled`, `required`, `invalid`, `level` and `hasPopup` are the states and
 properties a screen reader announces, `aria` holds any other aria-* attributes
 (e.g. `aria-current`), and for composite widgets (grid, listbox, menu, …)
