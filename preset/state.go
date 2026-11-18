@@ -22,8 +22,7 @@ type Tab struct {
 //
 // It reports what a screen reader would announce rather than raw DOM content:
 // Text skips aria-hidden / hidden subtrees and uses descendants' aria-label;
-// aria-describedby resolves to the referenced text; for composite widgets
-// (grid, listbox, menu, …) the container's content is not reported, and the
+// for composite widgets (grid, listbox, menu, …) the container's content is not reported, and the
 // item aria-activedescendant points at is in ActiveDescendant. A fieldset's
 // <legend> shows up in Context, as the group it names.
 //
@@ -48,6 +47,11 @@ type Tab struct {
 // checkbox, a radio, a button, a link. A list-style <select> (multiple, or
 // size > 1) has no value; its selected options are in SelectedText.
 //
+// Description is the accessible description a screen reader reads after the
+// rest (often after a pause), as Chromium computes it: the text of the
+// aria-describedby targets (even hidden ones), else aria-description, else a
+// title the name didn't already use. It is omitted when there is none.
+//
 // The states and properties in AXState (checked, expanded, disabled, level,
 // …) come from Chromium's accessibility tree too, so native and ARIA ones are
 // the same (a native indeterminate checkbox and aria-checked="mixed" are both
@@ -71,7 +75,7 @@ type FocusedElement struct {
 	Text             *string           `json:"text,omitempty"`         // screen-reader text content
 	Value            *string           `json:"value,omitempty"`        // value, from Chromium's accessibility tree
 	SelectedText     *string           `json:"selectedText,omitempty"` // a list-style <select>'s selected options, ", "-joined
-	DescribedBy      *string           `json:"describedBy,omitempty"`  // text of the aria-describedby targets
+	Description      *string           `json:"description,omitempty"`  // accessible description, from Chromium's accessibility tree
 	Context          []ContextItem     `json:"context,omitempty"`      // ancestors a screen reader may announce, outermost first
 	AXState                            // states and properties, from Chromium's accessibility tree
 	Aria             map[string]string `json:"aria,omitempty"`             // aria-* attributes no other field covers
@@ -142,7 +146,7 @@ type ContextItem struct {
 // ActiveDescendant is the item a focused composite widget designates via
 // aria-activedescendant: what a screen reader announces while DOM focus stays
 // on the container. Missing is set when the id resolves to no element. Role,
-// Name, NameSources, Value, AXState and Aria follow the same rules as on
+// Name, NameSources, Value, Description, AXState and Aria follow the same rules as on
 // FocusedElement.
 type ActiveDescendant struct {
 	Role        *string      `json:"role,omitempty"`
@@ -150,7 +154,7 @@ type ActiveDescendant struct {
 	NameSources []NameSource `json:"nameSources,omitempty"`
 	Value       *string      `json:"value,omitempty"`
 	Text        *string      `json:"text,omitempty"`
-	DescribedBy *string      `json:"describedBy,omitempty"`
+	Description *string      `json:"description,omitempty"`
 	AXState
 	Aria    map[string]string `json:"aria,omitempty"`
 	Missing bool              `json:"missing,omitempty"`
