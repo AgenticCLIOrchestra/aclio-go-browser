@@ -88,7 +88,7 @@ One `*session.Browser` is one live browser: its own Playwright driver, browser, 
 - **`Close(b)`** closes the context (which finishes the video), the browser and the driver. Closing twice is fine.
 - **`Perform(b, actions)`** runs `action.Validate` on every action, performs them in order, and stops at the first failure. Failures come back in each action's `Reason`, not as an error, so they can go straight to the agent. After each action that touches the page it waits for the page's load event. `javascript` returns its result as JSON.
 - **`Snapshot(b, perception, dir)`** captures only what the preset perceives. A preset that perceives neither screenshot nor DOM (e.g. `Blind()`) writes no files at all.
-- **`Tabs`, `Focused`, `Navigate`.** `Navigate` is for you (e.g. the start page), so unlike the agent's `goTo` it accepts any URL.
+- **`Tabs`, `Focused`, `Navigate`.** `Navigate` is for you (e.g. the start page), so unlike the agent's `goTo` it accepts any URL. `Focused` needs Chromium: the focused element's `role` (and its active descendant's) is the computed role from Chromium's own accessibility tree, the one a screen reader is given, so it is the explicit role when valid and otherwise the implicit one (a `<button>` is `button`, a plain `<div>` `generic`).
 
 Artifacts are reached only through an `os.Root` on the artifacts directory, so neither a crafted name nor a planted symlink can reach outside it. Creating an artifact that exists fails. `readArtifact` refuses binary files and files over 1 MB.
 
