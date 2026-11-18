@@ -182,3 +182,24 @@ func TestAXFromNodeDescription(t *testing.T) {
 		}
 	}
 }
+
+// ARIA roles pass through; known internal roles map to their ARIA stand-in;
+// an unknown internal role gives no role rather than a guess.
+func TestARIARole(t *testing.T) {
+	for raw, want := range map[string]*string{
+		`{"role":{"type":"role","value":"button"}}`:                     ptr("button"),
+		`{"role":{"type":"internalRole","value":"Date"}}`:               ptr("textbox"),
+		`{"role":{"type":"internalRole","value":"DisclosureTriangle"}}`: ptr("button"),
+		`{"role":{"type":"internalRole","value":"Video"}}`:              ptr("generic"),
+		`{"role":{"type":"internalRole","value":"SomethingNew"}}`:       nil,
+		`{}`: nil,
+	} {
+		var n cdpAXNode
+		if err := json.Unmarshal([]byte(raw), &n); err != nil {
+			t.Fatal(err)
+		}
+		if got := ariaRole(n); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: role = %v, want %v", raw, got, want)
+		}
+	}
+}
