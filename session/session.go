@@ -54,6 +54,24 @@ type Opts struct {
 	// createArtifact, readArtifact, listArtifacts) operate. Required; it is
 	// created on the first artifact written.
 	ArtifactsDir string
+	// ConsoleLog is the absolute path of a JSON Lines file that receives,
+	// as they happen, every console message, uncaught page error and page
+	// crash, from every tab (including tabs the page opens by itself) and
+	// worker, plus tab, navigation and active-tab events, and the turn
+	// markers LogTurn writes. Each record is written straight to the file,
+	// so it survives the process being killed. "" keeps no log. It is
+	// best-effort: failing to create or write it never fails the session.
+	// The text is recorded as the page logged it, secrets included.
+	ConsoleLog string
+	// ConsoleLogFieldCap caps each console text, error name, message and
+	// stack, and each URL (page, source, worker), in bytes; a record with a
+	// cut field is flagged "truncated". 0 means
+	// DefaultConsoleLogFieldCap.
+	ConsoleLogFieldCap int
+	// ConsoleLogMaxBytes caps the console log file. Past it, one "dropped"
+	// record is written and the rest are only counted, in the final
+	// "closed" record. 0 means DefaultConsoleLogMaxBytes.
+	ConsoleLogMaxBytes int64
 }
 
 // Browser is one live browser session. Its fields are private: use the
@@ -66,7 +84,8 @@ type Browser struct {
 	active       playwright.Page
 	artifactsDir string
 	closed       bool
-	announcer    *announcer // nil unless StartAnnouncing was called
+	announcer    *announcer  // nil unless StartAnnouncing was called
+	consoleLog   *consoleLog // nil unless Opts.ConsoleLog is set (and could be opened)
 }
 
 // Engine reports which browser b is.
@@ -95,15 +114,20 @@ func Open(opts Opts) (*Browser, error) {
 		return nil, fmt.Errorf("session: starting playwright (call browserinstall.Ensure first?): %w", err)
 	}
 	b := &Browser{engine: eng, pw: pw, artifactsDir: opts.ArtifactsDir}
+	b.consoleLog = startConsoleLog(opts, eng)
 
 	if err := launch(b, browserType(pw, eng), opts, size); err != nil {
 		_ = Close(b)
 		return nil, fmt.Errorf("session: launching %s: %w", eng, err)
 	}
+	if b.consoleLog != nil {
+		// Before any page loads, so the first document's messages are kept.
+		listenConsole(b.consoleLog, b.context)
+	}
 
 	// A persistent context opens with a page already; reuse it.
 	if pages := b.context.Pages(); len(pages) > 0 {
-		b.active = pages[0]
+		setActive(b, pages[0])
 		return b, nil
 	}
 	page, err := b.context.NewPage()
@@ -111,7 +135,7 @@ func Open(opts Opts) (*Browser, error) {
 		_ = Close(b)
 		return nil, fmt.Errorf("session: opening first tab: %w", err)
 	}
-	b.active = page
+	setActive(b, page)
 	return b, nil
 }
 
@@ -129,6 +153,7 @@ func validateOpts(opts Opts) error {
 	if v := opts.Viewport; v != nil && (v.Width <= 0 || v.Height <= 0) {
 		errs = append(errs, fmt.Errorf("Viewport %dx%d must be positive", v.Width, v.Height))
 	}
+	errs = append(errs, validateConsoleLog(opts)...)
 	return errors.Join(errs...)
 }
 
@@ -183,9 +208,10 @@ func launch(b *Browser, bt playwright.BrowserType, opts Opts, size *playwright.S
 }
 
 // Close shuts b down: the context first (which finishes writing the video),
-// then the browser, then the Playwright driver. Every step runs even if an
-// earlier one fails; the first error is returned. Closing an already closed
-// Browser does nothing.
+// then the browser, then the Playwright driver. The console log, if any, is
+// finished once the context has closed, so what pages log while unloading is
+// kept. Every step runs even if an earlier one fails; the first error is
+// returned. Closing an already closed Browser does nothing.
 func Close(b *Browser) error {
 	if b == nil || b.closed {
 		return nil
@@ -197,6 +223,7 @@ func Close(b *Browser) error {
 	if b.context != nil {
 		errs = append(errs, b.context.Close())
 	}
+	stopConsoleLog(b.consoleLog)
 	if b.browser != nil {
 		errs = append(errs, b.browser.Close())
 	}

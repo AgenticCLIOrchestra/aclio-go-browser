@@ -219,3 +219,20 @@ func TestBlindRefusesFirefox(t *testing.T) {
 		t.Errorf("Run wrote %d entries before refusing", len(es))
 	}
 }
+
+func TestConsoleLogPath(t *testing.T) {
+	now := time.Date(2026, 11, 20, 23, 2, 22, 337e6, time.Local)
+	dirs := Dirs{Working: "/w"}
+	for _, c := range []struct {
+		r    aclio.Request
+		want string
+	}{
+		{aclio.Request{Provider: aclio.Claude}, "/w/debug/20261120-230222.337-browser-console.jsonl"},
+		{aclio.Request{Provider: aclio.Codex, Name: "My Run"}, "/w/debug/20261120-230222.337-my-run-console.jsonl"},
+		{aclio.Request{Provider: aclio.Claude, ClaudeOpts: &claude.RunOpts{TempDir: "/own"}}, "/own/20261120-230222.337-browser-console.jsonl"},
+	} {
+		if got := consoleLogPath(c.r, dirs, now); got != c.want {
+			t.Errorf("consoleLogPath(%+v) = %q, want %q", c.r, got, c.want)
+		}
+	}
+}

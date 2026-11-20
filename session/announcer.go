@@ -232,11 +232,12 @@ func attachAnnouncer(a *announcer, p playwright.Page) error {
 	return nil
 }
 
-// setActive makes p b's active tab, and the announcer's, when b announces.
-// An announcer that can't follow (rare: the tab closing under it) stays quiet
-// rather than failing the tab action.
+// setActive makes p b's active tab, records it in the console log, and makes
+// it the announcer's, when b announces. An announcer that can't follow (rare:
+// the tab closing under it) stays quiet rather than failing the tab action.
 func setActive(b *Browser, p playwright.Page) {
 	b.active = p
+	logPage(b.consoleLog, "active", p)
 	if b.announcer != nil {
 		_ = attachAnnouncer(b.announcer, p)
 	}
