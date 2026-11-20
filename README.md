@@ -84,10 +84,11 @@ res, err := browser.Loop(b, req, dirs)
 
 One `*session.Browser` is one live browser: its own Playwright driver, browser, tabs and directories.
 
-- **`Open(opts)`** launches Chromium or Firefox. With a `UserDataDir` it uses a persistent context; without one, a fresh context with no profile directory at all. Playwright's video recording is always on. Options are checked before anything launches, and anything half-started is shut down again on failure.
+- **`Open(opts)`** launches Chromium or Firefox. With a `UserDataDir` it uses a persistent context; without one, a fresh context with no profile directory at all. Playwright's video recording is always on. Options are checked before anything launches, and anything half-started is shut down again on failure. With `Opts.ConsoleLog` set it keeps a [console log](#console-log).
 - **`Close(b)`** closes the context (which finishes the video), the browser and the driver. Closing twice is fine.
 - **`Perform(b, actions)`** runs `action.Validate` on every action, performs them in order, and stops at the first failure. Failures come back in each action's `Reason`, not as an error, so they can go straight to the agent. After each action that touches the page it waits for the page's load event. `javascript` returns its result as JSON.
 - **`Snapshot(b, perception, dir)`** captures only what the preset perceives. A preset that perceives neither screenshot nor DOM (e.g. `Blind()`) writes no files at all.
+- **`LogTurn(b, n)`** writes a turn marker to the console log; it does nothing when there is none.
 - **`StartAnnouncing(b, language)` / `TakeAnnouncements(b)`** record what a screen reader says as it happens, and hand it over (emptying the store); see [Screen reader announcement](#screen-reader-announcement). Chromium only.
 - **`Tabs`, `Focused`, `Navigate`.** `Navigate` is for you (e.g. the start page), so unlike the agent's `goTo` it accepts any URL. `Focused` needs Chromium: the focused element's `role`, `name`, `nameSources`, `value`, `description`, states and properties and `context` (and, except `context`, its active descendant's) come from Chromium's own accessibility tree, the one a screen reader is given. `role` is the explicit role when valid and otherwise the implicit one (a `<button>` is `button`, a plain `<div>` `generic`). For the few elements Chromium gives one of its own internal roles instead of an ARIA one, the nearest ARIA role is reported: `textbox` for the date and time inputs, `button` for `<summary>` and the colour input, and `generic` for those with no corresponding ARIA role (`<video>`, `<audio>`, `<canvas>`, `<iframe>`, `<label>`, …). `name` is the one accessible name a screen reader announces (`""` when there is none), and `nameSources` lists every source that had a value (`aria-labelledby`, `aria-label`, `labelfor`, `contents`, `title`, …) in precedence order, marking the outranked ones `superseded`. `value` is what a screen reader reads as the value: the text in a field (masked for a password), a drop-down's selected text, a slider's number; it is absent for checkboxes, radios, buttons and links. `description` is the accessible description a screen reader reads after the rest: the text of the `aria-describedby` targets (even hidden ones), else `aria-description`, else a `title` the name didn't already use. The states and properties (`preset.AXState`: `checked` as `"true"`, `"false"` or `"mixed"`, `pressed`, `selected`, `expanded`, `disabled`, `readOnly`, `required`, `invalid`, `level`, `hasPopup`, `multiselectable`, `orientation`, `valueMin` / `valueMax` / `valueText`, `autocomplete`, `keyShortcuts`, `roleDescription`, `modal`, `ignored` / `ignoredReasons`) are the same for native and ARIA markup and reflect what the user did. Chromium leaves `required` out for some controls (e.g. a required checkbox), so the DOM's `required` / `aria-required` stands in then. An element the tree leaves out (`ignored`, e.g. an active descendant with `aria-hidden` or `display:none`) is reported as only that and its `ignoredReasons`, since a screen reader announces nothing for it. Chromium never leaves out the focused element itself, even inside `aria-hidden`. `context` is the focused element's ancestors in the tree, outermost first, as `{role, name}`: the landmarks, groups, lists, tables and dialogs a screen reader announces when focus moves into them (e.g. `main`, `form` "Prefs", `group` "Sort by" for a radio in a fieldset). Generic wrappers, ignored nodes and the document itself are left out. A screen reader announces only the ones focus has just entered; `context` has them all, every turn. `aria` keeps only the aria-* attributes none of these cover (e.g. `aria-current`, `aria-valuetext`, `aria-setsize`), which the tree doesn't report.
 
@@ -238,6 +239,7 @@ type Options struct {
     UserDataDir  *string         // nil: anonymous session, no profile dir anywhere
     Headed       bool            // show the browser window; headless by default
     Viewport     *browser.Size   // nil: browser.DefaultViewport() (1280x720)
+    NoConsoleLog bool            // don't keep the console log in the debug dir
 }
 ```
 
@@ -246,6 +248,7 @@ type Options struct {
 - **`ArtifactsDir`** is the only place the `screenshot`, `createArtifact`, `readArtifact` and `listArtifacts` actions can reach, and the agent only ever reaches it through them, never with a file tool. Artifacts are create-only: nothing edits, overwrites or deletes one. The directory is created on the first write.
 - **`UserDataDir`** is a browser profile to run with, so logins and cookies carry over between runs. A profile belongs to one browser, so don't share a directory between Chromium and Firefox. When it's nil the run is anonymous: a fresh, non-persistent browser context with no profile directory at all, not even a temporary one.
 - **`Viewport`** is the page size in CSS pixels, and also the size of the recorded video.
+- **`NoConsoleLog`** turns off the [console log](#console-log), which `Run` otherwise keeps whenever there is a debug dir.
 - **Nothing is ever deleted.** Working directories, artifacts and recordings all stay after the run; cleaning them up is your call.
 
 Set a path field to choose it, or leave it nil for the default. A pointer to `""` is an error, not a default. `browser.ResolveDirs(opts)` returns the absolute paths a run will use.
@@ -257,9 +260,37 @@ Set a path field to choose it, or leave it nil for the default. A pointer to `""
 ├── agent/          the agent's working directory: the only place it can read
 │   └── turns/      each turn's {UTC timestamp}.png and .html, if the preset perceives them
 ├── video/          Playwright's recording of the run
-├── debug/          the CLI's per-call debug dumps (unless you set your own TempDir)
+├── debug/          the CLI's per-call debug dumps and the console log (unless you set your own TempDir)
 └── artifacts/      the artifacts, unless ArtifactsDir points elsewhere
 ```
+
+### Console log
+
+`Run` writes everything the browser logs to `{stamp}-{name}-console.jsonl` in the debug dir, named and stamped like the CLI's dumps so it sorts just before the first turn's. It is one JSON object per line, from the moment the browser opens until it closes:
+
+```jsonl
+{"time":"2026-11-20T22:02:22.337412Z","stamp":"20261120-230222.337","kind":"open","engine":"chromium"}
+{"time":"…","stamp":"…","kind":"pageopen","tab":"t1","page":"about:blank"}
+{"time":"…","stamp":"…","kind":"active","tab":"t1"}
+{"time":"…","stamp":"…","kind":"navigation","tab":"t1","page":"http://localhost:9900/"}
+{"time":"…","stamp":"…","kind":"turn","turn":1}
+{"time":"…","stamp":"…","kind":"console","tab":"t1","page":"http://localhost:9900/","level":"error","text":"…","source":{"url":"…","line":1,"column":18233},"browserTime":1795212142337,"worker":false}
+{"time":"…","stamp":"…","kind":"pageerror","tab":"t1","page":"…","name":"TypeError","message":"…","stack":"…","source":{"url":"…","line":3,"column":7}}
+{"time":"…","stamp":"…","kind":"crash","tab":"t1","page":"…"}
+{"time":"…","stamp":"…","kind":"pageclose","tab":"t2","page":"…"}
+{"time":"…","stamp":"…","kind":"dropped","reason":"file size cap reached"}
+{"time":"…","stamp":"…","kind":"closed","dropped":1234}
+```
+
+- **What's in it:** every console message at every level (with `worker` and `workerURL` for workers), every uncaught page error, every page crash, tabs opening and closing, main-frame navigations, the active tab changing, and one `turn` marker per snapshot, numbered like `Result.Turns`. It covers every tab, including inactive ones and tabs the page opens by itself. `tab` is a stable id (`t1`, `t2`, …), since tab indexes shift when tabs close. `stamp` lines a record up with the per-turn dumps; `time` is UTC.
+- **It survives a hard stop.** Each record is written straight to the file as it arrives, with no buffering, so a killed process (SIGKILL, a CI timeout), a crashed browser or a failed run keeps everything received so far. Only a clean `Close` writes `closed`.
+- **Caps:** each `text`, `name`, `message`, `stack` and URL (`page`, `source.url`, `workerURL`) is cut at 16 KiB and flagged `"truncated": true`. Past 50 MiB the file stops growing: one `dropped` record is written, and `closed` reports how many records were dropped. Set `session.Opts.ConsoleLogFieldCap` / `ConsoleLogMaxBytes` to change them.
+- **No agent sees it**, whatever its preset: the debug dir is outside the agent's working directory, and nothing of it goes into `preset.State` or a prompt.
+- **It never fails a run.** If the file can't be created or written, logging just stops.
+- **It holds whatever the page logs**, tokens and personal data included, like the DOM dumps and prompts already in the debug dir. Mind that before uploading the debug dir anywhere.
+- **Both engines,** with no CDP.
+- **Your own browser:** with `Loop`, set `session.Opts.ConsoleLog` to an absolute path yourself; `Loop` writes the turn markers.
+- **Very heavy logging:** console messages cross the Playwright driver's pipe one by one. A page logging tens of thousands of messages a second can outrun it and kill the driver connection.
 
 ## browserinstall
 

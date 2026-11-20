@@ -104,7 +104,11 @@ func Run(req Request) (Result, error) {
 	}
 	res := Result{Dirs: dirs}
 
-	b, err := session.Open(sessionOpts(req.Options, dirs))
+	opts := sessionOpts(req.Options, dirs)
+	if !req.Options.NoConsoleLog {
+		opts.ConsoleLog = consoleLogPath(req.Agent, dirs, time.Now())
+	}
+	b, err := session.Open(opts)
 	if err != nil {
 		return res, err
 	}
@@ -162,7 +166,7 @@ func loop(b *session.Browser, req Request, p preset.Preset, dirs Dirs) (Result, 
 			return res, err
 		}
 	}
-	st, err := snapshot(b, p, turnsDir, base)
+	st, err := snapshot(b, p, turnsDir, base, 1)
 	if err != nil {
 		return res, err
 	}
@@ -183,7 +187,7 @@ func loop(b *session.Browser, req Request, p preset.Preset, dirs Dirs) (Result, 
 			return res, fmt.Errorf("browser: %w (%d)", ErrTurnLimit, maxTurns)
 		}
 		performed := Perform(b, p, turn.Response.Actions)
-		if st, err = snapshot(b, p, turnsDir, base); err != nil {
+		if st, err = snapshot(b, p, turnsDir, base, res.Turns+1); err != nil {
 			return res, err
 		}
 		turn, err = agent.Subsequent(agent.SubsequentRequest{
@@ -324,14 +328,36 @@ func sessionOpts(o Options, dirs Dirs) session.Opts {
 // in chronological order.
 const debugStampLayout = "20060102-150405.000"
 
-// snapshot takes the turn's snapshot. When the preset perceives the focused
+// consoleLogPath is where Run keeps the console log: the run's debug dir (as
+// loop will set it up), named like the CLI's dumps,
+// {stamp}-{name}-console.jsonl, stamped at open so it sorts just before the
+// first turn's dumps. "" when there is no debug dir.
+func consoleLogPath(r aclio.Request, dirs Dirs, now time.Time) string {
+	r = agentRequest(r, filepath.Join(dirs.Working, agentSubdir), filepath.Join(dirs.Working, debugSubdir))
+	dir := debugDir(r)
+	if dir == "" {
+		return ""
+	}
+	if !filepath.IsAbs(dir) {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return ""
+		}
+		dir = abs
+	}
+	return filepath.Join(dir, now.Format(debugStampLayout)+"-"+debugName(r.Name)+"-console.jsonl")
+}
+
+// snapshot takes turn n's snapshot, first marking the turn in the console log
+// (session.LogTurn). When the preset perceives the focused
 // element, it adds everything the screen reader has said since the previous
 // snapshot (State.Announcement, see session.StartAnnouncing). When the preset doesn't perceive the DOM (e.g. Blind), the DOM is still
 // saved, formatted the same way, to the debug dir as
 // {stamp}-{name}-dom.html, out of the agent's reach. That copy is
 // best-effort, like the CLI's own debug dumps: failing to write it never
 // fails the run.
-func snapshot(b *session.Browser, p preset.Preset, turnsDir string, r aclio.Request) (preset.State, error) {
+func snapshot(b *session.Browser, p preset.Preset, turnsDir string, r aclio.Request, n int) (preset.State, error) {
+	session.LogTurn(b, n)
 	st, err := session.Snapshot(b, p.Perceive, turnsDir)
 	if err != nil {
 		return st, err

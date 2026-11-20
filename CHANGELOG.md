@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-11-21
+
+### Added
+- A console log. `Run` writes every console message (all levels, from pages, workers and service workers), uncaught page error and page crash to `{stamp}-{name}-console.jsonl` in the debug dir, as JSON Lines, from the moment the browser opens until it closes. It covers every tab, including inactive tabs and tabs the page opens by itself, and also records tabs opening and closing, main-frame navigations, the active tab changing, and one `turn` marker per snapshot. Each record carries `time` (UTC), `stamp` (matching the per-turn dump names) and `kind`, plus a stable `tab` id and the `page` URL where it applies. Each record is written straight to the file, unbuffered, so it survives the process being killed. Text, error names, messages, stacks and URLs are capped at 16 KiB each (flagged `truncated`), and the file at 50 MiB: past it, one `dropped` record is written and every later record is only counted, in the final `closed` record. It is best-effort and never fails a run. No agent sees it, whatever its preset. Works on Chromium and Firefox
+- `Options.NoConsoleLog`, to turn the console log off
+- `session.Opts.ConsoleLog` (the log's absolute path; `""` keeps none), `session.Opts.ConsoleLogFieldCap` and `session.Opts.ConsoleLogMaxBytes`, with `session.DefaultConsoleLogFieldCap` and `session.DefaultConsoleLogMaxBytes`, for callers that open the browser themselves
+- `session.LogTurn(b, n)`, which writes a turn marker to the console log, or does nothing when there is none
+
 ## [0.16.0] - 2026-11-18
 
 ### Added
@@ -153,6 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.17.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.14.0...v0.15.0

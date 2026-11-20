@@ -41,6 +41,16 @@ type Options struct {
 	// Viewport is the page size in CSS pixels, which is also the size of the
 	// recorded video. nil means DefaultViewport() (1280x720).
 	Viewport *Size
+	// NoConsoleLog turns off the console log Run keeps in the debug dir:
+	// {stamp}-{name}-console.jsonl, one JSON record per line, written as it
+	// happens, of every console message, uncaught page error and page crash
+	// in every tab and worker, with tab, navigation and turn markers (see
+	// session.Opts.ConsoleLog). No agent ever sees it, whatever its preset;
+	// it is for whoever investigates a run afterwards. It holds whatever
+	// the page logs, tokens and personal data included, like the DOM dumps
+	// and prompts already in the debug dir. Run keeps it only when there is
+	// a debug dir. Callers of Loop set session.Opts.ConsoleLog themselves.
+	NoConsoleLog bool
 }
 
 // Dirs are the absolute directories a run uses, resolved from Options.
