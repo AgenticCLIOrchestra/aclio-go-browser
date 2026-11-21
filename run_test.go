@@ -220,7 +220,7 @@ func TestBlindRefusesFirefox(t *testing.T) {
 	}
 }
 
-func TestConsoleLogPath(t *testing.T) {
+func TestDebugLogPath(t *testing.T) {
 	now := time.Date(2026, 11, 20, 23, 2, 22, 337e6, time.Local)
 	dirs := Dirs{Working: "/w"}
 	for _, c := range []struct {
@@ -231,8 +231,11 @@ func TestConsoleLogPath(t *testing.T) {
 		{aclio.Request{Provider: aclio.Codex, Name: "My Run"}, "/w/debug/20261120-230222.337-my-run-console.jsonl"},
 		{aclio.Request{Provider: aclio.Claude, ClaudeOpts: &claude.RunOpts{TempDir: "/own"}}, "/own/20261120-230222.337-browser-console.jsonl"},
 	} {
-		if got := consoleLogPath(c.r, dirs, now); got != c.want {
-			t.Errorf("consoleLogPath(%+v) = %q, want %q", c.r, got, c.want)
+		if got := debugLogPath(c.r, dirs, now, "console"); got != c.want {
+			t.Errorf("debugLogPath(%+v) = %q, want %q", c.r, got, c.want)
 		}
+	}
+	if got := debugLogPath(aclio.Request{Provider: aclio.Claude}, dirs, now, "network"); got != "/w/debug/20261120-230222.337-browser-network.jsonl" {
+		t.Errorf("network path = %q", got)
 	}
 }

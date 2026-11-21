@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-11-21
+
+### Added
+- A network log. `Run` writes the browser's failed network requests to `{stamp}-{name}-network.jsonl` in the debug dir, as it happens, with the console log's guarantees: unbuffered, so it survives the process being killed; best-effort; never seen by an agent; Chromium and Firefox. By default it records a `response` for every status of 400 or above, with allowlisted headers and `ttfbMs`, and a `requestfailed` for every request that got no response, with `failure` and `aborted`, from every tab, popup, worker and service worker. For a text error response (`text/*`, JSON, XML, `+json` / `+xml`), the first 8 KiB of the body follow in a `responsebody` record with the same `id`. Bodies are fetched off Playwright's dispatch goroutine, through a bounded queue (64, 5 s per body), so a slow body never holds anything up: past the queue, a response gets `bodySkipped`. `Close` gives queued bodies 2 s to arrive, and `closed` reports how many were still `pending`. A fetch cancelled because its page navigated away isn't reported by Playwright, so it isn't logged
+- `Options.NoNetworkLog`, to turn the network log off, and `Options.NetworkLogAll`, to record every request too: a `response` for every response and a `finished` record with `durationMs` for every request
+- `session.Opts.NetworkLog` (the log's absolute path; `""` keeps none) and `session.Opts.Network` (`session.NetworkLogOpts`: `Mode` (`session.NetworkLogFailures` or `session.NetworkLogAll`), `BodyCap`, `BodyTimeout`, `QueueSize`, `Headers`, `RequestBodyURLs`, `FieldCap`, `MaxBytes`), with `session.DefaultNetworkLogBodyCap`, `DefaultNetworkLogBodyTimeout` and `DefaultNetworkLogQueueSize`
+- Headers are recorded only from an allowlist: `content-type`, `content-length`, `location`, anything with `trace`, `request-id` or `correlation` in its name, plus `NetworkLogOpts.Headers`. `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key` and `X-Auth-Token` are never recorded. Request bodies are recorded only for URLs matching `NetworkLogOpts.RequestBodyURLs`
+
+### Changed
+- URLs in the console log are now redacted too, like the network log's: the values of sensitive query and fragment parameters (`code`, `state`, `token`, `access_token`, `password`, `secret`, `api_key`, `signature`, `session`, any name containing `token` or `secret`, …) become `REDACTED`
+- The console log and the network log share their tab ids, tab records (`pageopen`, `pageclose`, `navigation`, `active`, `crash`) and `turn` markers; `session.LogTurn` writes to both
+
 ## [0.17.0] - 2026-11-21
 
 ### Added
@@ -161,6 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.18.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.15.0...v0.15.1

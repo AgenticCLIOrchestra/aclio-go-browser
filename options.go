@@ -51,6 +51,18 @@ type Options struct {
 	// and prompts already in the debug dir. Run keeps it only when there is
 	// a debug dir. Callers of Loop set session.Opts.ConsoleLog themselves.
 	NoConsoleLog bool
+	// NoNetworkLog turns off the network log Run keeps in the debug dir:
+	// {stamp}-{name}-network.jsonl, written as it happens, of every response
+	// with status 400 or above (with the start of a text body) and every
+	// request that got no response, in every tab and worker, with the same
+	// tab and turn markers (see session.Opts.NetworkLog). No agent ever sees
+	// it. URLs are redacted, only an allowlist of headers is kept and no
+	// request body is, but error bodies are kept as the server sent them and
+	// may hold personal data. Run keeps it only when there is a debug dir.
+	NoNetworkLog bool
+	// NetworkLogAll makes the network log also record a one-line summary of
+	// every response, and the duration of every request.
+	NetworkLogAll bool
 }
 
 // Dirs are the absolute directories a run uses, resolved from Options.

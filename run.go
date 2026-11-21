@@ -105,8 +105,15 @@ func Run(req Request) (Result, error) {
 	res := Result{Dirs: dirs}
 
 	opts := sessionOpts(req.Options, dirs)
+	now := time.Now()
 	if !req.Options.NoConsoleLog {
-		opts.ConsoleLog = consoleLogPath(req.Agent, dirs, time.Now())
+		opts.ConsoleLog = debugLogPath(req.Agent, dirs, now, "console")
+	}
+	if !req.Options.NoNetworkLog {
+		opts.NetworkLog = debugLogPath(req.Agent, dirs, now, "network")
+		if req.Options.NetworkLogAll {
+			opts.Network.Mode = session.NetworkLogAll
+		}
 	}
 	b, err := session.Open(opts)
 	if err != nil {
@@ -328,11 +335,11 @@ func sessionOpts(o Options, dirs Dirs) session.Opts {
 // in chronological order.
 const debugStampLayout = "20060102-150405.000"
 
-// consoleLogPath is where Run keeps the console log: the run's debug dir (as
-// loop will set it up), named like the CLI's dumps,
-// {stamp}-{name}-console.jsonl, stamped at open so it sorts just before the
+// debugLogPath is where Run keeps the kind ("console", "network") debug log:
+// the run's debug dir (as loop will set it up), named like the CLI's dumps,
+// {stamp}-{name}-{kind}.jsonl, stamped at open so it sorts just before the
 // first turn's dumps. "" when there is no debug dir.
-func consoleLogPath(r aclio.Request, dirs Dirs, now time.Time) string {
+func debugLogPath(r aclio.Request, dirs Dirs, now time.Time, kind string) string {
 	r = agentRequest(r, filepath.Join(dirs.Working, agentSubdir), filepath.Join(dirs.Working, debugSubdir))
 	dir := debugDir(r)
 	if dir == "" {
@@ -345,7 +352,7 @@ func consoleLogPath(r aclio.Request, dirs Dirs, now time.Time) string {
 		}
 		dir = abs
 	}
-	return filepath.Join(dir, now.Format(debugStampLayout)+"-"+debugName(r.Name)+"-console.jsonl")
+	return filepath.Join(dir, now.Format(debugStampLayout)+"-"+debugName(r.Name)+"-"+kind+".jsonl")
 }
 
 // snapshot takes turn n's snapshot, first marking the turn in the console log
