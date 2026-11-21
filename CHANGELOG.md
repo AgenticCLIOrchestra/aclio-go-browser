@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.1] - 2026-11-21
+
+### Fixed
+- In the network log's default (`failures`) mode, a request whose error response was recorded and that then failed (e.g. midway through its body) now gets its `requestfailed` record with the response's `id`, as in `all` mode, instead of a new one
+- A response body fetch that times out now keeps its place in the body queue until it actually ends, so `NetworkLogOpts.QueueSize` also caps fetches still hanging after their timeout. Before, each one freed its place at once, so fetches stuck on a slow server could pile up without limit
+
 ## [0.18.0] - 2026-11-21
 
 ### Added
@@ -173,6 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.18.1]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.15.1...v0.16.0

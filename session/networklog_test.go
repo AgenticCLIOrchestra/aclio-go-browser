@@ -148,6 +148,50 @@ func TestNetworkLogAll(t *testing.T) {
 	}
 }
 
+// In failures mode too, a recorded response and its request's failure share
+// an id, and a finished request is forgotten.
+func TestNetworkLogLinksFailureToResponse(t *testing.T) {
+	d, path := netLogs(t, NetworkLogOpts{})
+	broken := &fakeRequest{method: "GET", url: "http://x/broken", failure: "net::ERR_CONNECTION_RESET"}
+	done := &fakeRequest{method: "GET", url: "http://x/done"}
+	logResponse(d, &fakeResponse{req: broken, status: 500, headers: map[string]string{"content-type": "image/png"}})
+	logResponse(d, &fakeResponse{req: done, status: 404, headers: map[string]string{"content-type": "image/png"}})
+	logRequestEnd(d, "requestfailed", broken)
+	forgetRequest(d.network, done)
+	if len(d.network.pending) != 0 {
+		t.Errorf("pending = %v", d.network.pending)
+	}
+	drainNetwork(d)
+	stopLogs(d)
+	recs := readLog(t, path)
+	resp, fail := byKind(recs, "response"), byKind(recs, "requestfailed")
+	if len(fail) != 1 || fail[0]["id"] != resp[0]["id"] {
+		t.Errorf("response = %v, requestfailed = %v", resp, fail)
+	}
+}
+
+// A body fetch that times out keeps its queue slot until Body returns.
+func TestNetworkLogTimedOutFetchKeepsSlot(t *testing.T) {
+	d, path := netLogs(t, NetworkLogOpts{QueueSize: 1, BodyTimeout: 50 * time.Millisecond})
+	release := make(chan struct{})
+	hang := &fakeResponse{req: &fakeRequest{method: "GET", url: "http://x/hang"}, status: 500,
+		headers: map[string]string{"content-type": "text/plain"}, body: func() ([]byte, error) { <-release; return nil, errors.New("closed") }}
+	logResponse(d, hang)
+	waitForLog(t, path, `timed out after 50ms`)
+	logResponse(d, hang) // the timed-out fetch still holds the only slot
+	close(release)
+	for len(d.network.slots) != 0 { // freed once Body returns
+		time.Sleep(10 * time.Millisecond)
+	}
+	logResponse(d, hang) // queued again
+	drainNetwork(d)
+	stopLogs(d)
+	resps := byKind(readLog(t, path), "response")
+	if len(resps) != 3 || resps[0]["bodySkipped"] != nil || resps[1]["bodySkipped"] != "queue full" || resps[2]["bodySkipped"] != nil {
+		t.Errorf("responses = %v", resps)
+	}
+}
+
 // A full body queue skips the body instead of blocking, and Close's drain
 // window reports what is still being fetched.
 func TestNetworkLogQueue(t *testing.T) {

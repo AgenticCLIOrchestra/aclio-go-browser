@@ -48,8 +48,9 @@ type NetworkLogOpts struct {
 	// BodyTimeout is how long fetching one error body may take. 0 means
 	// DefaultNetworkLogBodyTimeout.
 	BodyTimeout time.Duration
-	// QueueSize is how many error bodies may be waiting or being fetched;
-	// past it, a response is recorded with "bodySkipped" instead of blocking. 0 means
+	// QueueSize is how many error bodies may be waiting or being fetched
+	// (including fetches that timed out but haven't ended yet); past it, a
+	// response is recorded with "bodySkipped" instead of blocking. 0 means
 	// DefaultNetworkLogQueueSize.
 	QueueSize int
 	// Headers are response header names recorded on top of the default
@@ -82,7 +83,7 @@ type netLog struct {
 
 	mu        sync.Mutex
 	accepting bool                         // jobs may be queued (false once Close drains)
-	pending   map[playwright.Request]int64 // all mode: response id, for its finished record
+	pending   map[playwright.Request]int64 // a recorded response's id, until its request ends
 	slots     chan struct{}                // one per body job queued or being fetched
 	jobs      chan bodyJob
 	done      chan struct{} // closed when the body worker exits
@@ -139,7 +140,17 @@ func listenNetwork(d *debugLogs, ctx playwright.BrowserContext) {
 	ctx.OnRequestFailed(func(r playwright.Request) { logRequestEnd(d, "requestfailed", r) })
 	if d.network.all {
 		ctx.OnRequestFinished(func(r playwright.Request) { logRequestEnd(d, "finished", r) })
+	} else {
+		// Nothing is recorded, but a recorded response's id is forgotten.
+		ctx.OnRequestFinished(func(r playwright.Request) { forgetRequest(d.network, r) })
 	}
+}
+
+// forgetRequest drops req's response id, once req has finished.
+func forgetRequest(n *netLog, req playwright.Request) {
+	n.mu.Lock()
+	delete(n.pending, req)
+	n.mu.Unlock()
 }
 
 // requestRecord is the part of a record every request kind shares, from
@@ -178,9 +189,9 @@ func logResponse(d *debugLogs, resp playwright.Response) {
 
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if n.all {
-		n.pending[req] = r.ID
-	}
+	// Remembered until the request ends, so a requestfailed (e.g. the body
+	// failing midway) or finished record carries the same id.
+	n.pending[req] = r.ID
 	if status < 400 {
 		writeRecord(n.file, r)
 		return
@@ -245,12 +256,13 @@ func runBodyWorker(n *netLog) {
 	defer close(n.done)
 	for j := range n.jobs {
 		writeRecord(n.file, fetchBody(n, j))
-		<-n.slots
 	}
 }
 
 // fetchBody returns the responsebody record for j: the start of the body, or
-// why there is none.
+// why there is none. j's queue slot is freed when Body returns, not when
+// fetchBody does: a fetch that timed out keeps its slot until it ends (at
+// the latest when the context closes), so QueueSize caps those too.
 func fetchBody(n *netLog, j bodyJob) logRecord {
 	r := logRecord{Kind: "responsebody", ID: j.id, ContentType: j.contentType}
 	type result struct {
@@ -259,6 +271,7 @@ func fetchBody(n *netLog, j bodyJob) logRecord {
 	}
 	ch := make(chan result, 1)
 	go func() {
+		defer func() { <-n.slots }()
 		b, err := j.resp.Body()
 		ch <- result{b, err}
 	}()
