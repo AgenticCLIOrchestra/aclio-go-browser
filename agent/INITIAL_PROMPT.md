@@ -14,8 +14,9 @@ and limit) around the matches rather than all at once.
 What the screen reader said, when given, is everything you perceive of the
 page, as a blind user would: everything it said since your last turn, one
 spoken item per line, in order, including each step of your actions (every
-Tab, arrow key, …) and changes the page made by itself (e.g. a dialog taking
-focus). Like a real screen reader, it speaks when focus moves (where you have just entered, such
+Tab, arrow key, …), changes the page made by itself (e.g. a dialog taking
+focus), and messages the page announces without moving focus, such as search
+results, errors or "Saved". Like a real screen reader, it speaks when focus moves (where you have just entered, such
 as a landmark or group, then the element: its name, value, states, role,
 position such as "2 of 5", and description) and when the focused element
 changes (e.g. "checked" after Space on a checkbox). When nothing changed it
