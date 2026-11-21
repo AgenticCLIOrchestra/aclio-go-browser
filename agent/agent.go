@@ -23,6 +23,7 @@ package agent
 
 import (
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -98,14 +99,18 @@ type InitialRequest struct {
 	// as ClaudeOpts.TempDir. Prompt, JSONSchema and ResumeID are set by this
 	// package, and so are the agent's tools.
 	Request aclio.Request
+	// Session, when set, runs the turn on this session (see StartSession)
+	// instead of a fresh CLI call. Request.Dir must still be the session's
+	// working dir, since snapshot paths are made relative to it.
+	Session *aclio.Session
 }
 
 // SubsequentRequest continues a task with the outcome of the last batch.
 type SubsequentRequest struct {
 	// Prompt is the template. Required; DefaultSubsequentPrompt is ours.
 	Prompt string
-	// SessionID continues the conversation. Required: Turn.SessionID from the
-	// previous turn.
+	// SessionID continues the conversation. Required without Session:
+	// Turn.SessionID from the previous turn.
 	SessionID string
 	// Performed is the outcome of the last batch of actions.
 	Performed []action.Performed
@@ -115,6 +120,10 @@ type SubsequentRequest struct {
 	State preset.State
 	// Request as for InitialRequest.
 	Request aclio.Request
+	// Session, when set, continues the conversation on this session (the one
+	// the first turn ran on) instead of resuming SessionID in a fresh CLI
+	// call.
+	Session *aclio.Session
 }
 
 // Turn is one agent turn.
@@ -133,17 +142,23 @@ func Initial(req InitialRequest) (Turn, error) {
 	if err != nil {
 		return Turn{}, err
 	}
+	if req.Session != nil {
+		return send(req.Session, text)
+	}
 	return run(req.Request, text, schema, "")
 }
 
 // Subsequent runs a later turn of a task.
 func Subsequent(req SubsequentRequest) (Turn, error) {
-	if req.SessionID == "" {
-		return Turn{}, errors.New("agent: SessionID is required")
+	if req.SessionID == "" && req.Session == nil {
+		return Turn{}, errors.New("agent: SessionID or Session is required")
 	}
 	text, schema, err := renderSubsequent(req)
 	if err != nil {
 		return Turn{}, err
+	}
+	if req.Session != nil {
+		return send(req.Session, text)
 	}
 	return run(req.Request, text, schema, req.SessionID)
 }
@@ -191,6 +206,41 @@ func run(base aclio.Request, text, schema, sessionID string) (Turn, error) {
 	req.ResumeID = sessionID
 
 	resp, result, err := aclio.RunStructured[Response](req)
+	if err != nil {
+		return Turn{}, fmt.Errorf("agent: %w", err)
+	}
+	return Turn{SessionID: result.SessionID, Response: resp, Result: result}, nil
+}
+
+// StartSession opens a session for a whole task under preset p: every turn
+// runs on it (set InitialRequest.Session / SubsequentRequest.Session), so with
+// Claude one CLI process serves the whole task instead of one per turn. base
+// is as for InitialRequest.Request; the agent's tools and the response schema
+// are fixed here, exactly as for a single turn. Close it with
+// aclio.CloseSession.
+func StartSession(base aclio.Request, p preset.Preset) (*aclio.Session, error) {
+	req, err := lockDown(base)
+	if err != nil {
+		return nil, err
+	}
+	if err := preset.Validate(p); err != nil {
+		return nil, fmt.Errorf("agent: %w", err)
+	}
+	s, err := ResponseSchema(p)
+	if err != nil {
+		return nil, fmt.Errorf("agent: %w", err)
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return nil, fmt.Errorf("agent: encoding the response schema: %w", err)
+	}
+	req.Prompt = ""
+	req.JSONSchema = string(b)
+	return aclio.StartSession(req)
+}
+
+func send(s *aclio.Session, text string) (Turn, error) {
+	resp, result, err := aclio.SendStructured[Response](s, text)
 	if err != nil {
 		return Turn{}, fmt.Errorf("agent: %w", err)
 	}

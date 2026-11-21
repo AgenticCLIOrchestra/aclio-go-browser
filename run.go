@@ -173,6 +173,14 @@ func loop(b *session.Browser, req Request, p preset.Preset, dirs Dirs) (Result, 
 			return res, err
 		}
 	}
+	// One session for the whole task: with Claude, one CLI process serves
+	// every turn rather than a resumed process per turn.
+	sess, err := agent.StartSession(base, p)
+	if err != nil {
+		return res, err
+	}
+	defer aclio.CloseSession(sess)
+
 	st, err := snapshot(b, p, turnsDir, base, 1)
 	if err != nil {
 		return res, err
@@ -183,6 +191,7 @@ func loop(b *session.Browser, req Request, p preset.Preset, dirs Dirs) (Result, 
 		Preset:  p,
 		State:   st,
 		Request: base,
+		Session: sess,
 	})
 	if err != nil {
 		return res, err
@@ -204,6 +213,7 @@ func loop(b *session.Browser, req Request, p preset.Preset, dirs Dirs) (Result, 
 			Preset:    p,
 			State:     st,
 			Request:   base,
+			Session:   sess,
 		})
 		if err != nil {
 			return res, err

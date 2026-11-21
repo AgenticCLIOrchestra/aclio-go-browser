@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-11-21
+
+### Added
+- `agent.StartSession(request, preset)`, which opens an aclio-go session for a whole task, with the agent's tools and the preset's response schema fixed as for a single turn, and `InitialRequest.Session` / `SubsequentRequest.Session`, which run a turn on it. With a session, `SubsequentRequest.SessionID` isn't needed. Close it with `aclio.CloseSession`
+
+### Changed
+- `Run` and `Loop` run a whole task on one session. With Claude, one `claude` process serves every turn instead of a new process resuming the conversation each turn, so later turns skip the process start and transcript reload; if the process dies, the conversation is resumed in a new one. With Codex, each turn is still a run resuming the previous thread. `Result`'s cost and tokens are still summed over every turn, each turn counting only its own
+- Requires aclio-go v0.13.0
+
 ## [0.19.0] - 2026-11-21
 
 ### Added
@@ -187,6 +196,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.20.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.17.0...v0.18.0
