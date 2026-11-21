@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - 2026-11-21
+
+### Added
+- The screen reader now speaks live regions, as a real one does: what the page announces without moving focus, such as search result counts ("3 results available", "No matching users or groups."), "Saved" toasts and form errors. They go into `State.Announcement` in order with the focus announcements, as the text alone. A live region is an element with `aria-live="polite"` / `"assertive"` or the role `status` / `log` (polite) or `alert` (assertive), inherited from the nearest ancestor that sets one; an explicit `aria-live` wins over the role. Only a change `aria-relevant` covers (by default `additions text`) that changes what is rendered is spoken: with `aria-atomic` (true by default for `alert` and `status`) as the whole region, otherwise as the change alone. Changes in one region from one task are spoken once. Hidden content, blank text, `aria-live="off"` and regions inserted already filled stay silent, except an inserted, revealed or newly assigned `alert`. So does replacing text with identical text, compared exactly, so a repeat an app forces with an NBSP or a thin space is spoken. A known limit: a removed node's CSS can't be read, so removing stylesheet-hidden text from a region whose `aria-relevant` lists `removals` is spoken. A region under `aria-busy="true"` is silent and is spoken once, whole, when it stops being busy. Each announcement is capped at 1024 characters. Only the active tab's main frame is heard: background tabs and iframes are silent. Nothing changes for presets that don't perceive the focused element
+
+### Changed
+- `DefaultInitialPrompt` tells the agent that the screen reader also speaks messages the page announces without moving focus
+
 ## [0.18.1] - 2026-11-21
 
 ### Fixed
@@ -179,6 +187,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.19.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.16.0...v0.17.0
