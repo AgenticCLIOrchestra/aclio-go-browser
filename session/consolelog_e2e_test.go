@@ -29,12 +29,14 @@ console.log('hello log'); console.info('hello info'); console.warn('hello warn')
 console.error('hello error'); console.debug('hello debug');
 new Worker('/worker.js');
 window.open('/popup');
+fetch('/api/bad');
 setTimeout(() => { throw new TypeError('boom') }, 0);
 setTimeout(() => { location.href = '/next' }, 1500);
 </script>`,
 		"/popup":     `<!doctype html><title>Popup</title><script>console.log('popup says hi')</script>`,
 		"/next":      `<!doctype html><title>Next</title><script>console.log('after navigation')</script>`,
 		"/worker.js": `console.log('worker says hi')`,
+		"/api/bad":   `{"detail":"bad"}`,
 		"/flood": `<!doctype html><title>Flood</title><button id=b>b</button><script>
 const flood = () => { for (let i = 0; i < 10000; i++) console.log('flood ' + i + ' ' + 'x'.repeat(100)) };
 flood(); document.getElementById('b').onclick = flood;
@@ -44,6 +46,12 @@ flood(); document.getElementById('b').onclick = flood;
 		body, ok := pages[r.URL.Path]
 		if !ok {
 			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Path == "/api/bad" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(400)
+			fmt.Fprint(w, body)
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, ".js") {
@@ -211,18 +219,21 @@ func TestE2EConsoleLogStress(t *testing.T) {
 }
 
 // TestE2EConsoleLogKill kills a process mid-session and checks that every
-// record it had written is still there.
+// record it had written, to the console log and the network log, is still
+// there.
 func TestE2EConsoleLogKill(t *testing.T) {
 	e2e(t)
 	srv := consoleServer(t)
 	path := filepath.Join(t.TempDir(), "console.jsonl")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestConsoleLogKillHelper$", "-test.v")
-	cmd.Env = append(os.Environ(), "ACLIO_CONSOLE_LOG_HELPER="+path, "ACLIO_CONSOLE_LOG_URL="+srv.URL)
+	netPath := filepath.Join(filepath.Dir(path), "network.jsonl")
+	cmd.Env = append(os.Environ(), "ACLIO_CONSOLE_LOG_HELPER="+path, "ACLIO_NETWORK_LOG_HELPER="+netPath, "ACLIO_CONSOLE_LOG_URL="+srv.URL)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
 	before := waitForLog(t, path, `"text":"hello log"`, `"text":"after navigation"`, `"kind":"pageerror"`)
+	netBefore := waitForLog(t, netPath, `"kind":"response"`, `"status":400`)
 	if err := cmd.Process.Signal(syscall.SIGKILL); err != nil {
 		t.Fatal(err)
 	}
@@ -238,6 +249,11 @@ func TestE2EConsoleLogKill(t *testing.T) {
 	if k := kinds(recs); slices.Contains(k, "closed") {
 		t.Errorf("a killed run wrote closed: %v", k)
 	}
+	netAfter, _ := os.ReadFile(netPath)
+	if !strings.HasPrefix(string(netAfter), netBefore) {
+		t.Errorf("network records lost by the kill:\nbefore:\n%s\nafter:\n%s", netBefore, netAfter)
+	}
+	readLog(t, netPath)
 }
 
 // TestConsoleLogKillHelper is TestE2EConsoleLogKill's child process: it
@@ -252,6 +268,7 @@ func TestConsoleLogKillHelper(t *testing.T) {
 		VideoDir:     filepath.Join(dir, "video"),
 		ArtifactsDir: filepath.Join(dir, "artifacts"),
 		ConsoleLog:   path,
+		NetworkLog:   os.Getenv("ACLIO_NETWORK_LOG_HELPER"),
 	})
 	if err != nil {
 		t.Fatal(err)

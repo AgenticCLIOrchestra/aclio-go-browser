@@ -56,25 +56,25 @@ func kinds(recs []map[string]any) []string {
 
 func TestConsoleLogRecords(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "log.jsonl")
-	l := startConsoleLog(Opts{ConsoleLog: path}, engine.Chromium)
+	l := startLogs(Opts{ConsoleLog: path}, engine.Chromium)
 	if l == nil {
 		t.Fatal("no log")
 	}
 	p1, p2 := &fakePage{url: "about:blank"}, &fakePage{url: "http://x/2"}
 	watchPage(l, p1)
 	watchPage(l, p1) // seen once only
-	LogTurn(&Browser{consoleLog: l}, 1)
-	logPage(l, "navigation", p2) // first seen here: pageopen first
-	logPage(l, "active", p2)
+	LogTurn(&Browser{logs: l}, 1)
+	logTab(l, "navigation", p2) // first seen here: pageopen first
+	logTab(l, "active", p2)
 	p1.onCrash(p1)
-	logPage(l, "pageclose", p2)
+	logTab(l, "pageclose", p2)
 
 	// Flushed as it happens: readable before stop.
 	got := strings.Join(kinds(readLog(t, path)), ",")
 	if want := "open,pageopen,turn,pageopen,navigation,active,crash,pageclose"; got != want {
 		t.Fatalf("kinds = %s, want %s", got, want)
 	}
-	stopConsoleLog(l)
+	stopLogs(l)
 	recs := readLog(t, path)
 	last := recs[len(recs)-1]
 	if last["kind"] != "closed" || last["dropped"] != 0.0 {
@@ -102,8 +102,8 @@ func TestConsoleLogRecords(t *testing.T) {
 	}
 
 	// Stopped: nothing more is written, and stopping again is harmless.
-	LogTurn(&Browser{consoleLog: l}, 2)
-	stopConsoleLog(l)
+	LogTurn(&Browser{logs: l}, 2)
+	stopLogs(l)
 	if n := len(readLog(t, path)); n != len(recs) {
 		t.Errorf("records after stop: %d, want %d", n, len(recs))
 	}
@@ -111,12 +111,12 @@ func TestConsoleLogRecords(t *testing.T) {
 
 func TestConsoleLogFileCap(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "log.jsonl")
-	l := startConsoleLog(Opts{ConsoleLog: path, ConsoleLogMaxBytes: 1000}, engine.Firefox)
-	b := &Browser{consoleLog: l}
+	l := startLogs(Opts{ConsoleLog: path, ConsoleLogMaxBytes: 1000}, engine.Firefox)
+	b := &Browser{logs: l}
 	for i := range 100 {
 		LogTurn(b, i+1)
 	}
-	stopConsoleLog(l)
+	stopLogs(l)
 	recs := readLog(t, path)
 	dropped := 0
 	for _, r := range recs {
@@ -142,10 +142,10 @@ func TestConsoleLogFileCap(t *testing.T) {
 // records small enough to fit.
 func TestConsoleLogDropsEverythingAfterTheCap(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "log.jsonl")
-	l := startConsoleLog(Opts{ConsoleLog: path, ConsoleLogMaxBytes: 600}, engine.Chromium)
-	logPage(l, "navigation", &fakePage{url: "http://x/" + strings.Repeat("a", 1000)}) // too big: pageopen dropped
-	LogTurn(&Browser{consoleLog: l}, 1)                                               // would fit, but comes after a drop
-	stopConsoleLog(l)
+	l := startLogs(Opts{ConsoleLog: path, ConsoleLogMaxBytes: 600}, engine.Chromium)
+	logTab(l, "navigation", &fakePage{url: "http://x/" + strings.Repeat("a", 1000)}) // too big: pageopen dropped
+	LogTurn(&Browser{logs: l}, 1)                                                    // would fit, but comes after a drop
+	stopLogs(l)
 	recs := readLog(t, path)
 	if got := strings.Join(kinds(recs), ","); got != "open,dropped,closed" {
 		t.Fatalf("kinds = %s", got)
@@ -157,11 +157,11 @@ func TestConsoleLogDropsEverythingAfterTheCap(t *testing.T) {
 
 func TestConsoleLogCapsURLs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "log.jsonl")
-	l := startConsoleLog(Opts{ConsoleLog: path, ConsoleLogFieldCap: 20}, engine.Chromium)
+	l := startLogs(Opts{ConsoleLog: path, ConsoleLogFieldCap: 20}, engine.Chromium)
 	huge := "data:text/html," + strings.Repeat("x", 10000)
-	logPage(l, "navigation", &fakePage{url: huge})
-	logRecordOf(l, logRecord{Kind: "console", Source: &logSource{URL: huge}, WorkerURL: huge})
-	stopConsoleLog(l)
+	logTab(l, "navigation", &fakePage{url: huge})
+	writeRecord(l.console, logRecord{Kind: "console", Source: &logSource{URL: huge}, WorkerURL: huge})
+	stopLogs(l)
 	for _, r := range readLog(t, path)[1:3] { // pageopen, navigation
 		if p := r["page"].(string); len(p) != 20 || r["truncated"] != true {
 			t.Errorf("%v: page not capped", r["kind"])
@@ -174,7 +174,7 @@ func TestConsoleLogCapsURLs(t *testing.T) {
 }
 
 func TestConsoleLogOff(t *testing.T) {
-	if l := startConsoleLog(Opts{}, engine.Chromium); l != nil {
+	if l := startLogs(Opts{}, engine.Chromium); l != nil {
 		t.Error("log without a path")
 	}
 	// An unwritable location turns logging off instead of failing.
@@ -182,14 +182,14 @@ func TestConsoleLogOff(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if l := startConsoleLog(Opts{ConsoleLog: filepath.Join(file, "log.jsonl")}, engine.Chromium); l != nil {
+	if l := startLogs(Opts{ConsoleLog: filepath.Join(file, "log.jsonl")}, engine.Chromium); l != nil {
 		t.Error("log under a file")
 	}
 	// Every entry point accepts no log.
 	LogTurn(nil, 1)
 	LogTurn(&Browser{}, 1)
-	logPage(nil, "active", &fakePage{})
-	stopConsoleLog(nil)
+	logTab(nil, "active", &fakePage{})
+	stopLogs(nil)
 }
 
 func TestTruncate(t *testing.T) {

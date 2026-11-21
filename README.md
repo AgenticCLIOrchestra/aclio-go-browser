@@ -84,11 +84,11 @@ res, err := browser.Loop(b, req, dirs)
 
 One `*session.Browser` is one live browser: its own Playwright driver, browser, tabs and directories.
 
-- **`Open(opts)`** launches Chromium or Firefox. With a `UserDataDir` it uses a persistent context; without one, a fresh context with no profile directory at all. Playwright's video recording is always on. Options are checked before anything launches, and anything half-started is shut down again on failure. With `Opts.ConsoleLog` set it keeps a [console log](#console-log).
+- **`Open(opts)`** launches Chromium or Firefox. With a `UserDataDir` it uses a persistent context; without one, a fresh context with no profile directory at all. Playwright's video recording is always on. Options are checked before anything launches, and anything half-started is shut down again on failure. With `Opts.ConsoleLog` / `Opts.NetworkLog` set it keeps a [console log](#console-log) / [network log](#network-log).
 - **`Close(b)`** closes the context (which finishes the video), the browser and the driver. Closing twice is fine.
 - **`Perform(b, actions)`** runs `action.Validate` on every action, performs them in order, and stops at the first failure. Failures come back in each action's `Reason`, not as an error, so they can go straight to the agent. After each action that touches the page it waits for the page's load event. `javascript` returns its result as JSON.
 - **`Snapshot(b, perception, dir)`** captures only what the preset perceives. A preset that perceives neither screenshot nor DOM (e.g. `Blind()`) writes no files at all.
-- **`LogTurn(b, n)`** writes a turn marker to the console log; it does nothing when there is none.
+- **`LogTurn(b, n)`** writes a turn marker to the console and network logs; it does nothing when there are none.
 - **`StartAnnouncing(b, language)` / `TakeAnnouncements(b)`** record what a screen reader says as it happens, and hand it over (emptying the store); see [Screen reader announcement](#screen-reader-announcement). Chromium only.
 - **`Tabs`, `Focused`, `Navigate`.** `Navigate` is for you (e.g. the start page), so unlike the agent's `goTo` it accepts any URL. `Focused` needs Chromium: the focused element's `role`, `name`, `nameSources`, `value`, `description`, states and properties and `context` (and, except `context`, its active descendant's) come from Chromium's own accessibility tree, the one a screen reader is given. `role` is the explicit role when valid and otherwise the implicit one (a `<button>` is `button`, a plain `<div>` `generic`). For the few elements Chromium gives one of its own internal roles instead of an ARIA one, the nearest ARIA role is reported: `textbox` for the date and time inputs, `button` for `<summary>` and the colour input, and `generic` for those with no corresponding ARIA role (`<video>`, `<audio>`, `<canvas>`, `<iframe>`, `<label>`, …). `name` is the one accessible name a screen reader announces (`""` when there is none), and `nameSources` lists every source that had a value (`aria-labelledby`, `aria-label`, `labelfor`, `contents`, `title`, …) in precedence order, marking the outranked ones `superseded`. `value` is what a screen reader reads as the value: the text in a field (masked for a password), a drop-down's selected text, a slider's number; it is absent for checkboxes, radios, buttons and links. `description` is the accessible description a screen reader reads after the rest: the text of the `aria-describedby` targets (even hidden ones), else `aria-description`, else a `title` the name didn't already use. The states and properties (`preset.AXState`: `checked` as `"true"`, `"false"` or `"mixed"`, `pressed`, `selected`, `expanded`, `disabled`, `readOnly`, `required`, `invalid`, `level`, `hasPopup`, `multiselectable`, `orientation`, `valueMin` / `valueMax` / `valueText`, `autocomplete`, `keyShortcuts`, `roleDescription`, `modal`, `ignored` / `ignoredReasons`) are the same for native and ARIA markup and reflect what the user did. Chromium leaves `required` out for some controls (e.g. a required checkbox), so the DOM's `required` / `aria-required` stands in then. An element the tree leaves out (`ignored`, e.g. an active descendant with `aria-hidden` or `display:none`) is reported as only that and its `ignoredReasons`, since a screen reader announces nothing for it. Chromium never leaves out the focused element itself, even inside `aria-hidden`. `context` is the focused element's ancestors in the tree, outermost first, as `{role, name}`: the landmarks, groups, lists, tables and dialogs a screen reader announces when focus moves into them (e.g. `main`, `form` "Prefs", `group` "Sort by" for a radio in a fieldset). Generic wrappers, ignored nodes and the document itself are left out. A screen reader announces only the ones focus has just entered; `context` has them all, every turn. `aria` keeps only the aria-* attributes none of these cover (e.g. `aria-current`, `aria-valuetext`, `aria-setsize`), which the tree doesn't report.
 
@@ -240,6 +240,8 @@ type Options struct {
     Headed       bool            // show the browser window; headless by default
     Viewport     *browser.Size   // nil: browser.DefaultViewport() (1280x720)
     NoConsoleLog bool            // don't keep the console log in the debug dir
+    NoNetworkLog bool            // don't keep the network log in the debug dir
+    NetworkLogAll bool           // the network log records every request, not just failures
 }
 ```
 
@@ -249,6 +251,7 @@ type Options struct {
 - **`UserDataDir`** is a browser profile to run with, so logins and cookies carry over between runs. A profile belongs to one browser, so don't share a directory between Chromium and Firefox. When it's nil the run is anonymous: a fresh, non-persistent browser context with no profile directory at all, not even a temporary one.
 - **`Viewport`** is the page size in CSS pixels, and also the size of the recorded video.
 - **`NoConsoleLog`** turns off the [console log](#console-log), which `Run` otherwise keeps whenever there is a debug dir.
+- **`NoNetworkLog`** turns off the [network log](#network-log), kept the same way; **`NetworkLogAll`** makes it record every request instead of only failures.
 - **Nothing is ever deleted.** Working directories, artifacts and recordings all stay after the run; cleaning them up is your call.
 
 Set a path field to choose it, or leave it nil for the default. A pointer to `""` is an error, not a default. `browser.ResolveDirs(opts)` returns the absolute paths a run will use.
@@ -260,7 +263,7 @@ Set a path field to choose it, or leave it nil for the default. A pointer to `""
 ├── agent/          the agent's working directory: the only place it can read
 │   └── turns/      each turn's {UTC timestamp}.png and .html, if the preset perceives them
 ├── video/          Playwright's recording of the run
-├── debug/          the CLI's per-call debug dumps and the console log (unless you set your own TempDir)
+├── debug/          the CLI's per-call debug dumps and the console and network logs (unless you set your own TempDir)
 └── artifacts/      the artifacts, unless ArtifactsDir points elsewhere
 ```
 
@@ -284,6 +287,7 @@ Set a path field to choose it, or leave it nil for the default. A pointer to `""
 
 - **What's in it:** every console message at every level (with `worker` and `workerURL` for workers), every uncaught page error, every page crash, tabs opening and closing, main-frame navigations, the active tab changing, and one `turn` marker per snapshot, numbered like `Result.Turns`. It covers every tab, including inactive ones and tabs the page opens by itself. `tab` is a stable id (`t1`, `t2`, …), since tab indexes shift when tabs close. `stamp` lines a record up with the per-turn dumps; `time` is UTC.
 - **It survives a hard stop.** Each record is written straight to the file as it arrives, with no buffering, so a killed process (SIGKILL, a CI timeout), a crashed browser or a failed run keeps everything received so far. Only a clean `Close` writes `closed`.
+- **URLs are redacted:** the values of sensitive query and fragment parameters (`code`, `state`, `token`, `access_token`, `id_token`, `refresh_token`, `password`, `passwd`, `secret`, `client_secret`, `key`, `api_key`, `apikey`, `signature`, `sig`, `session`, and any name containing `token` or `secret`) become `REDACTED`, in every URL of both logs. That covers OAuth redirects such as `?code=…&state=…` and `#access_token=…`.
 - **Caps:** each `text`, `name`, `message`, `stack` and URL (`page`, `source.url`, `workerURL`) is cut at 16 KiB and flagged `"truncated": true`. Past 50 MiB the file stops growing: one `dropped` record is written, and `closed` reports how many records were dropped. Set `session.Opts.ConsoleLogFieldCap` / `ConsoleLogMaxBytes` to change them.
 - **No agent sees it**, whatever its preset: the debug dir is outside the agent's working directory, and nothing of it goes into `preset.State` or a prompt.
 - **It never fails a run.** If the file can't be created or written, logging just stops.
@@ -291,6 +295,26 @@ Set a path field to choose it, or leave it nil for the default. A pointer to `""
 - **Both engines,** with no CDP.
 - **Your own browser:** with `Loop`, set `session.Opts.ConsoleLog` to an absolute path yourself; `Loop` writes the turn markers.
 - **Very heavy logging:** console messages cross the Playwright driver's pipe one by one. A page logging tens of thousands of messages a second can outrun it and kill the driver connection.
+
+### Network log
+
+`Run` also writes the browser's failed network requests to `{stamp}-{name}-network.jsonl`, next to the console log and with the same guarantees: written as it happens, kept when the process is killed, never seen by an agent, never failing a run, both engines, no CDP. It shares the console log's record envelope, tab ids, tab records, `turn` markers, URL redaction and caps (`session.Opts.Network.FieldCap` / `MaxBytes`).
+
+```jsonl
+{"time":"…","stamp":"…","kind":"response","id":17,"tab":"t1","page":"http://localhost:9900/…","method":"POST","url":"http://localhost:9900/api/v1/…/execute","resourceType":"fetch","status":400,"statusText":"Bad Request","fromServiceWorker":false,"ttfbMs":142,"headers":{"content-type":"application/problem+json","x-request-id":"…"}}
+{"time":"…","stamp":"…","kind":"responsebody","id":17,"contentType":"application/problem+json","body":"{\"title\":\"Bad Request\",\"detail\":\"…\",\"traceId\":\"…\"}"}
+{"time":"…","stamp":"…","kind":"requestfailed","id":18,"tab":"t1","page":"…","method":"GET","url":"…/chunk-123.js","resourceType":"script","failure":"net::ERR_CONNECTION_REFUSED","aborted":false}
+{"time":"…","stamp":"…","kind":"closed","dropped":0,"pending":0}
+```
+
+- **What's in it (the default, `failures`):** a `response` record for every response with status 400 or above, and a `requestfailed` record for every request that got no response (refused, DNS, CORS, TLS, aborted), from every tab, popup, worker and service worker. `aborted` flags a cancelled request (`net::ERR_ABORTED` or the engine's equivalent). A fetch cancelled because its page navigated away isn't reported by Playwright at all, so it isn't in the log.
+- **Error bodies:** for a text response (`text/*`, JSON, XML, including `+json` / `+xml` types such as `application/problem+json`), the first 8 KiB of the body follow in a `responsebody` record with the same `id` (`truncated` when cut, `error` when the body couldn't be had). Any other content type gives `bodyOmitted` on the `response` instead. The `response` record is written at once and the body is fetched in the background (`Body` is a round trip to the driver), so a killed run still has the status line. At most 64 bodies wait or are fetched at a time, each with a 5 s timeout; past that a response gets `bodySkipped` rather than holding anything up. `Close` gives queued bodies 2 s to arrive, before the context goes, and `closed` reports how many were still `pending`.
+- **`all` mode** (`NetworkLogAll`, or `session.NetworkLogAll`) adds a `response` record for every response and a `finished` record, with `durationMs`, for every request. Bodies are still fetched only for errors.
+- **Headers:** only `content-type`, `content-length`, `location` and any header whose name contains `trace`, `request-id` or `correlation` (for finding the backend's logs), plus any you add in `session.Opts.Network.Headers`. `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key` and `X-Auth-Token` are never recorded, even if you add them.
+- **Request bodies** are never recorded, unless the URL matches one of `session.Opts.Network.RequestBodyURLs` (regular expressions); then it goes in `requestBody`, capped like response bodies. A login form can't end up in an artifact by accident.
+- **Response bodies are kept as the server sent them** and may hold personal data. Mind that before uploading the debug dir anywhere.
+- **Recording is passive:** nothing is intercepted or routed, so the page behaves exactly as it would without it.
+- **Your own browser:** with `Loop`, set `session.Opts.NetworkLog` (and `Network`) yourself.
 
 ## browserinstall
 
