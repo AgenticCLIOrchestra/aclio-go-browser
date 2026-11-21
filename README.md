@@ -54,8 +54,9 @@ type Request struct {
 ```
 
 - **The request is checked before anything happens.** A bad request creates no directory and launches no browser.
-- **`Agent`** is an ordinary aclio-go request. You choose the provider, model, run name, streaming, log writer and the CLI's stderr; this library sets the working directory, the prompt, the schema and session resumption, and **always** sets the agent's tools (see [agent](#agent)). Debug dumps go to `{WorkingDir}/debug` unless you set `ClaudeOpts.TempDir` / `CodexOpts.TempDir`.
+- **`Agent`** is an ordinary aclio-go request. You choose the provider, model, run name, streaming, log writer and the CLI's stderr; this library sets the working directory, the prompt, the schema and the session the task runs on, and **always** sets the agent's tools (see [agent](#agent)). Debug dumps go to `{WorkingDir}/debug` unless you set `ClaudeOpts.TempDir` / `CodexOpts.TempDir`.
 - **Each turn**, every action the agent returns goes through `preset.Check`. The first one the preset doesn't allow is refused (reported back as `refused: <reason>`) and the batch stops there, just as it stops at the first action that fails while running.
+- **One session per task.** `Run` and `Loop` open one aclio-go session for the whole task (`agent.StartSession`) and run every turn on it. With Claude, one `claude` process serves every turn, instead of a new process resuming the conversation each turn; if it dies, aclio-go resumes the conversation in a new one. With Codex, each turn is still a run resuming the previous thread.
 - **`Result`** is filled in as far as the run got, even when an error comes back: `Completed`, `Answer`, `Turns`, `SessionID`, `Dirs`, and the cost and tokens summed over every turn. Reaching `MaxTurns` without finishing returns an error wrapping `browser.ErrTurnLimit`.
 
 ### Running it yourself
@@ -111,6 +112,7 @@ turn, err := agent.Initial(agent.InitialRequest{
 - **Templates** may use any subset of the placeholders, which are exported as constants: `{task}` (required in the initial template), `{page_state}`, `{response_schema}`, `{examples}` and `{artifacts}` for the first turn; `{performed_actions}` and `{page_state}` after that. Any other `{snake_case}` token is an error, so a typo fails instead of reaching the model.
 - **The agent's tools are fixed, whatever the request asks for.** Claude gets only `Read(./**)` and `Grep(./**)`, the Read and Grep tools limited to its working directory. Codex runs in a read-only sandbox. Your `ClaudeOpts` / `CodexOpts` are copied, never modified.
 - **Snapshot paths must be inside the agent's working directory.** They are shown to the agent relative to it, and a path outside it fails the turn up front, since the agent couldn't read it.
+- **Sessions.** `agent.StartSession(request, preset)` opens an aclio-go session for a whole task, with the agent's tools and the preset's response schema fixed as for a single turn. Set it as `InitialRequest.Session` and `SubsequentRequest.Session` to run every turn on it (`SubsequentRequest.SessionID` is then not needed), and close it with `aclio.CloseSession`. `Request.Dir` must still be the session's working dir, since snapshot paths are made relative to it. Without a session, each turn is its own CLI call, and `Subsequent` resumes `SessionID`.
 - **Examples** shown to the agent are filtered with `preset.Check`, so it never sees an example it isn't allowed to follow. `DefaultExamples()` are ours; pass your own in `InitialRequest.Examples`.
 
 ## action
