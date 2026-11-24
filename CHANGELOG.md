@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-11-24
+
+### Added
+- A second screen reader, NVDA, next to the VoiceOver one. The blind preset, and any preset that perceives the focused element, hears both every turn. The two feeds are the same except for one thing: in a live region, nodes replaced by nodes with identical text (e.g. a re-render that remounts every message in a chat log) are spoken by NVDA and not by VoiceOver, since NVDA in Chrome reads every node inserted into a live region while VoiceOver skips a change whose text is identical. Such an item is spoken like any other addition: the added text, or the whole `aria-atomic` element. Setting a text node to the same value stays silent in both. Both feeds use the VoiceOver-modelled wording
+- `preset.Announcement` (`Text`, `VoiceOver`, `NVDA`): one spoken item and which screen readers spoke it, with `preset.VoiceOverSaid` and `preset.NVDASaid`, which give each feed
+
+### Changed
+- **Breaking:** `State.Announcement` is now `[]preset.Announcement` instead of `[]string`, one ordered list with each item marked with who spoke it, and `session.TakeAnnouncements` returns `[]preset.Announcement`. Use `preset.VoiceOverSaid(s.Announcement)` for the old `[]string`
+- `DescribeAnnouncement` renders VoiceOver's feed (`VoiceOver said, in order:`), then NVDA's: `NVDA said the same.` when it did, otherwise its full list. When neither said anything, it says `VoiceOver and NVDA said nothing this turn.` instead of `The screen reader said nothing this turn.`
+- `DefaultInitialPrompt` tells the agent it hears two screen readers and how they differ, and that content repeated only in the NVDA feed is a real finding
+
 ## [0.20.0] - 2026-11-21
 
 ### Added
@@ -196,6 +207,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.21.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.18.1...v0.19.0
 [0.18.1]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.18.0...v0.18.1

@@ -15,16 +15,18 @@ import (
 // its live regions. The page queues the element focused at each such event,
 // and the text each live region change speaks (announcerJS); Go turns each
 // focus entry into an announcement with preset.Announce, against the one
-// before, and takes each live entry as spoken. The queue is processed in the
-// background when the page signals, after each action Perform runs, and when
-// the announcements are taken.
+// before, and takes each live entry as spoken. Each item is marked with which
+// of the two modelled screen readers says it: both, except for live region
+// nodes replaced by nodes with identical text, which only NVDA speaks. The
+// queue is processed in the background when the page signals, after each
+// action Perform runs, and when the announcements are taken.
 type announcer struct {
 	mu   sync.Mutex
 	lang preset.Language
 	page playwright.Page        // the active tab, whose queue is read
 	cdp  playwright.CDPSession  // on page
 	last *preset.FocusedElement // the element announced last, nil after focus was lost
-	said []string               // announced since the last TakeAnnouncements
+	said []preset.Announcement  // announced since the last TakeAnnouncements
 
 	signal chan struct{} // the page has queued something
 	done   chan struct{} // closed by Close
@@ -35,9 +37,10 @@ type announcer struct {
 const announcerSignal = "__aclioAnnouncerSignal"
 
 // announcerJS installs the page side. Its queue holds, in the order they
-// happen, {kind: "focus", el} entries and {kind: "live", politeness, text}
-// entries; next() hands over a focus entry's element (the document when focus
-// was lost) and a live entry's text.
+// happen, {kind: "focus", el} entries and {kind: "live", politeness, text,
+// nvdaOnly} entries; next() hands over a focus entry's element (the document
+// when focus was lost) and a live entry's text behind 'n' (NVDA only) or 'b'
+// (both screen readers).
 //
 // Focus: it queues the focused element on every focusin, on input / change
 // events of the focused element, and on changes to the attributes of the
@@ -54,8 +57,10 @@ const announcerSignal = "__aclioAnnouncerSignal"
 // text, busy regions, aria-live="off" and regions inserted already filled
 // (except alerts) stay silent; a busy region is spoken once when it stops
 // being busy; replacing text with identical text (compared exactly) is
-// silent. A removed node can't be styled, so stylesheet-hidden text removed
-// from a region that lists removals is spoken.
+// silent for VoiceOver, while NVDA, which reads every node inserted into a
+// live region, speaks it (an entry flagged nvdaOnly). A removed node can't be
+// styled, so stylesheet-hidden text removed from a region that lists
+// removals is spoken.
 //
 // It runs in every new document (an init script) and in the active tab's
 // current one.
@@ -184,7 +189,13 @@ const announcerJS = `(() => {
     if (c >= 0xd800 && c <= 0xdbff) end--; // don't split a surrogate pair
     return s.slice(0, end) + '…';
   };
-  const say = (politeness, raw) => { const text = norm(raw); if (text) push({ kind: 'live', politeness, text: cap(text) }); };
+  // nvdaOnly marks what NVDA speaks and VoiceOver doesn't: nodes replaced by
+  // nodes with identical text (NVDA reads every node inserted into a live
+  // region; VoiceOver skips a change whose text is identical).
+  const say = (politeness, raw, nvdaOnly = false) => {
+    const text = norm(raw);
+    if (text) push({ kind: 'live', politeness, text: cap(text), nvdaOnly });
+  };
   // sayInserted speaks the alerts inserted (or revealed) with n: n itself
   // when it is an alert's root, else the alerts inside it. Other regions
   // inserted already filled stay silent.
@@ -305,13 +316,13 @@ const announcerJS = `(() => {
     const join = (a) => a.join(' ');
     for (const u of units.values()) {
       if (spoken.has(u.region.root) || !u.audible) continue;
-      // Replacing nodes with ones of identical (raw) text changed nothing a
-      // screen reader hears.
-      if (!u.textChanged && join(u.added) === join(u.removed)) continue;
+      // Replacing nodes with ones of identical (raw) text changed nothing
+      // VoiceOver hears; NVDA reads the inserted nodes all the same.
+      const nvdaOnly = !u.textChanged && join(u.added) === join(u.removed);
       if (u.atomic) {
-        if (!hidden(u.atomic)) say(u.region.politeness, textOf(u.atomic));
+        if (!hidden(u.atomic)) say(u.region.politeness, textOf(u.atomic), nvdaOnly);
       } else {
-        say(u.region.politeness, join(u.pieces));
+        say(u.region.politeness, join(u.pieces), nvdaOnly);
       }
     }
   }).observe(document, {
@@ -324,7 +335,9 @@ const announcerJS = `(() => {
   window.__aclioAnnouncer = {
     q,
     now: record,
-    next: () => { const e = q.shift(); return e && (e.kind === 'live' ? e.text : e.el); },
+    // A live entry comes out as its text behind one character: 'n' when
+    // only NVDA speaks it, 'b' when both screen readers do.
+    next: () => { const e = q.shift(); return e && (e.kind === 'live' ? (e.nvdaOnly ? 'n' : 'b') + e.text : e.el); },
   };
 })()`
 
@@ -379,11 +392,13 @@ func StartAnnouncing(b *Browser, lang preset.Language) error {
 	return nil
 }
 
-// TakeAnnouncements returns everything the screen reader has said since the
-// last call (or since StartAnnouncing), one spoken item per string, in order,
-// and forgets it. It is empty when nothing was said, and nil when b isn't
-// announcing.
-func TakeAnnouncements(b *Browser) []string {
+// TakeAnnouncements returns everything the screen readers have said since
+// the last call (or since StartAnnouncing), one spoken item each, in order,
+// and forgets it. Each item says whether VoiceOver, NVDA or both spoke it:
+// both, except for what a live region re-inserted with identical text, which
+// only NVDA reads (preset.VoiceOverSaid / preset.NVDASaid give each feed).
+// It is empty when nothing was said, and nil when b isn't announcing.
+func TakeAnnouncements(b *Browser) []preset.Announcement {
 	if b == nil || b.announcer == nil {
 		return nil
 	}
@@ -393,7 +408,7 @@ func TakeAnnouncements(b *Browser) []string {
 	processLocked(a)
 	said := a.said
 	if said == nil {
-		said = []string{}
+		said = []preset.Announcement{}
 	}
 	a.said = nil
 	return said
@@ -446,8 +461,8 @@ func processLocked(a *announcer) {
 		}
 		switch {
 		case ev.Result.Type == "string": // a live region spoke, which leaves focus as it was
-			if text, ok := ev.Result.Value.(string); ok && text != "" {
-				a.said = append(a.said, text)
+			if v, ok := ev.Result.Value.(string); ok && len(v) > 1 {
+				a.said = append(a.said, preset.Announcement{Text: v[1:], VoiceOver: v[0] != 'n', NVDA: true})
 			}
 			continue
 		case ev.Result.Type == "undefined" || ev.Result.ObjectID == "":
@@ -460,7 +475,9 @@ func processLocked(a *announcer) {
 		if err != nil || fe == nil {
 			continue
 		}
-		a.said = append(a.said, preset.Announce(fe, a.last, a.lang)...)
+		for _, text := range preset.Announce(fe, a.last, a.lang) {
+			a.said = append(a.said, preset.Announcement{Text: text, VoiceOver: true, NVDA: true})
+		}
 		a.last = fe
 	}
 }

@@ -57,6 +57,12 @@ document.getElementById('s').addEventListener('input', (e) => {
   log.append(sel, res, guide);
 });
 </script>`,
+		"/chat": `<!doctype html><title>Chat</title><button id="ask">Ask</button>
+<div role="log" aria-relevant="additions" id="log"><p>Q</p><p>A</p></div>
+<script>
+// Remounts every message, as a React re-render that keys them afresh does.
+window.rerender = () => { const log = document.getElementById('log'); log.innerHTML = Array.from(log.children, (p) => '<p>' + p.textContent + '</p>').join(''); };
+</script>`,
 		"/frame": `<!doctype html><title>Frame</title><button id="go">Go</button>
 <iframe srcdoc="<div role=status id=s></div>"></iframe>`,
 		"/alert": `<!doctype html><title>Alert</title><button id="go" onclick="
@@ -81,11 +87,14 @@ type liveEntry struct {
 	Kind       string `json:"kind"`
 	Politeness string `json:"politeness,omitempty"`
 	Text       string `json:"text,omitempty"`
+	nvdaOnly   bool
 }
 
 // TestE2ELiveRegionRules checks the page-side rules on their own: the page
 // script is installed without StartAnnouncing, so nothing drains its queue,
-// and each case's queue entries are read straight from it.
+// and each case's queue entries are read straight from it. want is the
+// VoiceOver feed (the entries not flagged NVDA-only); the NVDA feed (every
+// entry) is the same, except for the cases in nvdaDiffers.
 func TestE2ELiveRegionRules(t *testing.T) {
 	e2e(t)
 	srv := liveServer(t)
@@ -171,6 +180,17 @@ func TestE2ELiveRegionRules(t *testing.T) {
 
 		{"blank", `<div aria-live="polite" id="x"></div>`, `x.textContent = '   '`, nil},
 		{"identical text node replaced", `<div role="status" id="x">Saved</div>`, `x.textContent = 'Saved'`, nil},
+		{"log message remounted", `<div role="log" aria-relevant="additions" id="x"><p>Hello</p></div>`,
+			`x.firstChild.remove(); const p = document.createElement('p'); p.textContent = 'Hello'; x.append(p)`, nil},
+		{"log message remounted in 3 tasks", `<div role="log" aria-relevant="additions" id="x"><p>Hello</p></div>`,
+			`for (let i = 0; i < 3; i++) { x.innerHTML = '<p>Hello</p>'; await tick(); }`, nil},
+		{"two messages remounted in one commit", `<div role="log" aria-relevant="additions" id="x"><p>Q</p><p>A</p></div>`,
+			`x.innerHTML = '<p>Q</p><p>A</p>'`, nil},
+		{"remounted inside an atomic element", `<div aria-live="polite"><div aria-atomic="true" id="x">Page <span>2</span> of 5</div></div>`,
+			`x.querySelector('span').replaceWith(Object.assign(document.createElement('span'), {textContent: '2'}))`, nil},
+		{"remount and a real change", `<div role="log" aria-relevant="additions" id="x"><p>Q</p></div>`,
+			`x.innerHTML = '<p>Q</p>'; await tick(); x.insertAdjacentHTML('beforeend', '<p>A</p>')`,
+			[]liveEntry{live("polite", "A")}},
 		{"identical data", `<div aria-live="polite" id="x">Saved</div>`, `x.firstChild.data = 'Saved'`, nil},
 		{"NBSP forces a repeat", `<div role="status" id="x">Saved</div>`, `x.textContent = 'Saved\u00a0'`,
 			[]liveEntry{live("polite", "Saved")}},
@@ -231,11 +251,43 @@ func TestE2ELiveRegionRules(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := toEntries(got); !reflect.DeepEqual(got, c.want) {
-				t.Errorf("entries = %+v, want %+v", got, c.want)
+			all := toEntries(got)
+			var vo, nvda []liveEntry
+			for _, e := range all {
+				if !e.nvdaOnly {
+					vo = append(vo, e)
+				}
+				e.nvdaOnly = false
+				nvda = append(nvda, e)
+			}
+			if !reflect.DeepEqual(vo, c.want) {
+				t.Errorf("VoiceOver entries = %+v, want %+v", vo, c.want)
+			}
+			want, ok := nvdaDiffers[c.name]
+			if !ok {
+				want = c.want
+			}
+			if !reflect.DeepEqual(nvda, want) {
+				t.Errorf("NVDA entries = %+v, want %+v", nvda, want)
 			}
 		})
 	}
+}
+
+// nvdaDiffers is the NVDA feed for the rules cases where it differs from
+// VoiceOver's: nodes replaced by nodes with identical text, which NVDA reads.
+var nvdaDiffers = map[string][]liveEntry{
+	"identical text node replaced":             {liveAs("polite", "Saved")},
+	"identical re-render with CSS-hidden text": {liveAs("polite", "Saved")},
+	"log message remounted":                    {liveAs("polite", "Hello")},
+	"log message remounted in 3 tasks":         {liveAs("polite", "Hello"), liveAs("polite", "Hello"), liveAs("polite", "Hello")},
+	"two messages remounted in one commit":     {liveAs("polite", "Q A")},
+	"remounted inside an atomic element":       {liveAs("polite", "Page 2 of 5")},
+	"remount and a real change":                {liveAs("polite", "Q"), liveAs("polite", "A")},
+}
+
+func liveAs(politeness, text string) liveEntry {
+	return liveEntry{Kind: "live", Politeness: politeness, Text: text}
 }
 
 // withIDs binds the setup's x and y ids as variables for change, since
@@ -259,6 +311,7 @@ func toEntries(v any) []liveEntry {
 		e.Kind, _ = m["kind"].(string)
 		e.Politeness, _ = m["politeness"].(string)
 		e.Text, _ = m["text"].(string)
+		e.nvdaOnly, _ = m["nvdaOnly"].(bool)
 		out = append(out, e)
 	}
 	return out
@@ -289,20 +342,32 @@ func do(t *testing.T, b *Browser, actions ...action.Action) {
 	}
 }
 
-// heard collects what b says for a while: until it has said last, or for
-// wait when last is "" (to show something stays silent).
+// heard collects what VoiceOver says for a while: until it has said last, or
+// for wait when last is "" (to show something stays silent). Where nothing
+// was re-inserted with identical text, NVDA must have said the same.
 func heard(t *testing.T, b *Browser, last string, wait time.Duration) []string {
 	t.Helper()
-	var said []string
+	vo, nvda := heardBoth(t, b, last, wait)
+	if !reflect.DeepEqual(vo, nvda) {
+		t.Errorf("NVDA said %q, VoiceOver %q", nvda, vo)
+	}
+	return vo
+}
+
+// heardBoth collects what each screen reader says, until NVDA has said last,
+// or for wait when last is "".
+func heardBoth(t *testing.T, b *Browser, last string, wait time.Duration) (vo, nvda []string) {
+	t.Helper()
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
-		said = append(said, TakeAnnouncements(b)...)
-		if last != "" && len(said) > 0 && said[len(said)-1] == last {
-			return said
+		said := TakeAnnouncements(b)
+		vo, nvda = append(vo, preset.VoiceOverSaid(said)...), append(nvda, preset.NVDASaid(said)...)
+		if last != "" && len(nvda) > 0 && nvda[len(nvda)-1] == last {
+			return vo, nvda
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return said
+	return vo, nvda
 }
 
 func js(code string) action.Action {
@@ -327,7 +392,7 @@ func TestE2ELiveRegionSearch(t *testing.T) {
 	e2e(t)
 	b := openAnnouncing(t, liveServer(t), "/search")
 	do(t, b, click("#r"))
-	if said := TakeAnnouncements(b); len(said) == 0 || said[0] != "Recipients" {
+	if said := preset.VoiceOverSaid(TakeAnnouncements(b)); len(said) == 0 || said[0] != "Recipients" {
 		t.Fatalf("focus said %q", said)
 	}
 	do(t, b, typeText("#r", "a"))
@@ -441,5 +506,27 @@ func TestE2EAnnouncerFocusRegression(t *testing.T) {
 	}
 	if _, err := Snapshot(quiet, preset.Perception{Tabs: true}, t.TempDir()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// NVDA hears a live region's messages remounted with identical text, every
+// time; VoiceOver doesn't. Focus moves and genuinely new messages are the
+// same in both, in the same order.
+func TestE2ELiveRegionNVDA(t *testing.T) {
+	e2e(t)
+	b := openAnnouncing(t, liveServer(t), "/chat")
+	do(t, b,
+		js(`rerender()`),
+		press("Tab"),
+		js(`rerender()`),
+		js(`document.getElementById('log').insertAdjacentHTML('beforeend', '<p>New</p>')`),
+		js(`rerender()`),
+	)
+	vo, nvda := heardBoth(t, b, "Q A New", 3*time.Second)
+	if want := []string{"Ask", "button", "New"}; !reflect.DeepEqual(vo, want) {
+		t.Errorf("VoiceOver said %q, want %q", vo, want)
+	}
+	if want := []string{"Q A", "Ask", "button", "Q A", "New", "Q A New"}; !reflect.DeepEqual(nvda, want) {
+		t.Errorf("NVDA said %q, want %q", nvda, want)
 	}
 }

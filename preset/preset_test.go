@@ -1,6 +1,7 @@
 package preset
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -138,11 +139,11 @@ func TestDescribe(t *testing.T) {
 	if strings.Contains(blind, "shot.png") {
 		t.Errorf("blind describe leaks screenshot: %q", blind)
 	}
-	if !strings.Contains(blind, "The screen reader said nothing this turn.") || !strings.Contains(blind, `"active":true`) {
+	if !strings.Contains(blind, "VoiceOver and NVDA said nothing this turn.") || !strings.Contains(blind, `"active":true`) {
 		t.Errorf("blind describe = %q", blind)
 	}
-	s.Announcement = []string{"Save", "button"}
-	if got := Blind().Describe(s); !strings.Contains(got, "said, in order:\n- Save\n- button") {
+	s.Announcement = []Announcement{{Text: "Save", VoiceOver: true, NVDA: true}, {Text: "button", VoiceOver: true, NVDA: true}}
+	if got := Blind().Describe(s); !strings.Contains(got, "VoiceOver said, in order:\n- Save\n- button\nNVDA said the same.") {
 		t.Errorf("blind describe with an announcement = %q", got)
 	}
 
@@ -153,5 +154,44 @@ func TestDescribe(t *testing.T) {
 
 	if got := DescribeTabs(State{}); !strings.HasSuffix(got, "[]") {
 		t.Errorf("DescribeTabs with no tabs = %q", got)
+	}
+}
+
+// DescribeAnnouncement shows VoiceOver's feed, then NVDA's: in one line when
+// NVDA said the same, in full when it heard more.
+func TestDescribeAnnouncement(t *testing.T) {
+	both := func(text string) Announcement { return Announcement{Text: text, VoiceOver: true, NVDA: true} }
+	nvda := func(text string) Announcement { return Announcement{Text: text, NVDA: true} }
+	cases := []struct {
+		name string
+		said []Announcement
+		want string
+	}{
+		{"nothing", []Announcement{}, "VoiceOver and NVDA said nothing this turn."},
+		{"nil", nil, "VoiceOver and NVDA said nothing this turn."},
+		{"same", []Announcement{both("Save"), both("button")},
+			"VoiceOver said, in order:\n- Save\n- button\nNVDA said the same."},
+		{"NVDA heard more", []Announcement{both("Chat"), nvda("Hello"), both("log")},
+			"VoiceOver said, in order:\n- Chat\n- log\nNVDA said, in order:\n- Chat\n- Hello\n- log"},
+		{"only NVDA heard", []Announcement{nvda("Hello")},
+			"VoiceOver said nothing this turn.\nNVDA said, in order:\n- Hello"},
+	}
+	for _, c := range cases {
+		if got := DescribeAnnouncement(State{Announcement: c.said}); got != c.want {
+			t.Errorf("%s: got\n%s\nwant\n%s", c.name, got, c.want)
+		}
+	}
+}
+
+func TestSaidFeeds(t *testing.T) {
+	said := []Announcement{{Text: "a", VoiceOver: true, NVDA: true}, {Text: "b", NVDA: true}, {Text: "c", VoiceOver: true}}
+	if got := VoiceOverSaid(said); !reflect.DeepEqual(got, []string{"a", "c"}) {
+		t.Errorf("VoiceOverSaid = %q", got)
+	}
+	if got := NVDASaid(said); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Errorf("NVDASaid = %q", got)
+	}
+	if got := NVDASaid(nil); got == nil || len(got) != 0 {
+		t.Errorf("NVDASaid(nil) = %#v, want empty", got)
 	}
 }
