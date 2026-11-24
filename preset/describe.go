@@ -3,6 +3,7 @@ package preset
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -24,14 +25,30 @@ func DescribeFocused(s State) string {
 	return "Current focused element: " + string(b)
 }
 
-// DescribeAnnouncement gives what a screen reader said this turn
-// (State.Announcement), one spoken item per line, in order; it says so when
-// the screen reader said nothing.
+// DescribeAnnouncement gives what the two screen readers said this turn
+// (State.Announcement), VoiceOver's feed then NVDA's, each one spoken item per
+// line, in order. NVDA's part is one line when it said the same, and the
+// whole is one line when neither said anything.
 func DescribeAnnouncement(s State) string {
-	if len(s.Announcement) == 0 {
-		return "The screen reader said nothing this turn."
+	vo, nvda := VoiceOverSaid(s.Announcement), NVDASaid(s.Announcement)
+	if len(vo) == 0 && len(nvda) == 0 {
+		return "VoiceOver and NVDA said nothing this turn."
 	}
-	return "The screen reader said, in order:\n- " + strings.Join(s.Announcement, "\n- ")
+	return describeSaid("VoiceOver", vo) + "\n" + describeNVDA(vo, nvda)
+}
+
+func describeNVDA(vo, nvda []string) string {
+	if slices.Equal(vo, nvda) {
+		return "NVDA said the same."
+	}
+	return describeSaid("NVDA", nvda)
+}
+
+func describeSaid(reader string, said []string) string {
+	if len(said) == 0 {
+		return reader + " said nothing this turn."
+	}
+	return reader + " said, in order:\n- " + strings.Join(said, "\n- ")
 }
 
 // DescribeTabs lists the open tabs as compact JSON, one object per tab.

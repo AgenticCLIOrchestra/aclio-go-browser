@@ -35,8 +35,9 @@ func Full() Preset {
 
 // Blind is the screen-reader persona: keyboard only, no screenshot or DOM, no
 // targeting. It perceives the page the way a screen reader user does: it is
-// told only what a screen reader says (DescribeAnnouncement), in US English
-// unless Language says otherwise, plus the open tabs.
+// told only what two screen readers say, VoiceOver and NVDA
+// (DescribeAnnouncement), in US English unless Language says otherwise, plus
+// the open tabs.
 func Blind() Preset {
 	return Preset{
 		Name:     "blind",

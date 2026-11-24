@@ -6,13 +6,47 @@ type State struct {
 	ScreenshotPath string          // PNG of the viewport, if Perceive.Screenshot
 	DOMPath        string          // full DOM as HTML, if Perceive.DOM
 	Focused        *FocusedElement // nil when nothing meaningful is focused
-	// Announcement is everything a screen reader said since the previous
-	// turn's snapshot, one spoken item per string, in order: each focus
-	// change and each change to the focused element, as it happened (see
-	// Announce and session.StartAnnouncing). Filled by Run / Loop when the
-	// preset perceives the focused element; empty when it said nothing.
-	Announcement []string
+	// Announcement is everything the screen readers said since the previous
+	// turn's snapshot, one spoken item each, in order: each focus change,
+	// each change to the focused element and what live regions announced, as
+	// it happened (see Announce and session.StartAnnouncing), each marked
+	// with who said it. VoiceOverSaid and NVDASaid give each one's feed.
+	// Filled by Run / Loop when the preset perceives the focused element;
+	// empty when nothing was said.
+	Announcement []Announcement
 	Tabs         []Tab // in browser order, if Perceive.Tabs
+}
+
+// Announcement is one item a screen reader spoke, and which of the two
+// modelled screen readers spoke it. Most items are spoken by both; NVDA alone
+// speaks what a live region re-inserts with identical text (it reads every
+// node inserted into a live region, while VoiceOver skips a change whose
+// text is identical). The wording is VoiceOver's for both.
+type Announcement struct {
+	Text      string `json:"text"`
+	VoiceOver bool   `json:"voiceOver"`
+	NVDA      bool   `json:"nvda"`
+}
+
+// VoiceOverSaid is VoiceOver's feed: the text of the items it spoke, in
+// order.
+func VoiceOverSaid(as []Announcement) []string {
+	return spokenBy(as, func(a Announcement) bool { return a.VoiceOver })
+}
+
+// NVDASaid is NVDA's feed: the text of the items it spoke, in order.
+func NVDASaid(as []Announcement) []string {
+	return spokenBy(as, func(a Announcement) bool { return a.NVDA })
+}
+
+func spokenBy(as []Announcement, by func(Announcement) bool) []string {
+	said := []string{}
+	for _, a := range as {
+		if by(a) {
+			said = append(said, a.Text)
+		}
+	}
+	return said
 }
 
 // Tab summarises one open tab.

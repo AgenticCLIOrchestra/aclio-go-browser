@@ -122,9 +122,9 @@ func TestAnnouncingChecks(t *testing.T) {
 		t.Error("StartAnnouncing on nil should fail")
 	}
 	if got := TakeAnnouncements(&Browser{}); got != nil {
-		t.Errorf("TakeAnnouncements without announcing = %q, want nil", got)
+		t.Errorf("TakeAnnouncements without announcing = %v, want nil", got)
 	}
 	if got := TakeAnnouncements(nil); got != nil {
-		t.Errorf("TakeAnnouncements(nil) = %q", got)
+		t.Errorf("TakeAnnouncements(nil) = %v", got)
 	}
 }
