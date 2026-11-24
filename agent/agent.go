@@ -49,6 +49,12 @@ var DefaultInitialPrompt string
 //go:embed SUBSEQUENT_PROMPT.md
 var DefaultSubsequentPrompt string
 
+// screenReaderGuide explains the screen-reader output and the focused
+// element, for a preset that perceives the focused element.
+//
+//go:embed SCREEN_READER.md
+var screenReaderGuide string
+
 // Placeholders a template may use. A template can use any subset; any other
 // {lower_snake_case} token in it is an error.
 const (
@@ -58,6 +64,7 @@ const (
 	PlaceholderResponseSchema = "{response_schema}" // the JSON schema the agent must answer with
 	PlaceholderExamples       = "{examples}"        // examples the preset allows
 	PlaceholderArtifacts      = "{artifacts}"       // how to use artifacts; empty if the preset has none
+	PlaceholderScreenReader   = "{screen_reader}"   // what the screen readers' output and the focused element mean; empty if the preset doesn't perceive the focused element
 
 	// Subsequent turns (plus PlaceholderPageState).
 	PlaceholderPerformedActions = "{performed_actions}" // the last batch, with outcomes

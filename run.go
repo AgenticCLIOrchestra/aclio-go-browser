@@ -368,7 +368,8 @@ func debugLogPath(r aclio.Request, dirs Dirs, now time.Time, kind string) string
 // snapshot takes turn n's snapshot, first marking the turn in the console log
 // (session.LogTurn). When the preset perceives the focused
 // element, it adds everything the screen reader has said since the previous
-// snapshot (State.Announcement, see session.StartAnnouncing). When the preset doesn't perceive the DOM (e.g. Blind), the DOM is still
+// snapshot, by VoiceOver and NVDA (State.Announcement, see
+// session.StartAnnouncing). When the preset doesn't perceive the DOM (e.g. Blind), the DOM is still
 // saved, formatted the same way, to the debug dir as
 // {stamp}-{name}-dom.html, out of the agent's reach. That copy is
 // best-effort, like the CLI's own debug dumps: failing to write it never

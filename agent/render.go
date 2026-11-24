@@ -39,6 +39,7 @@ func renderInitial(req InitialRequest) (text, schema string, err error) {
 		"response_schema": prompt.JSON(json.RawMessage(schema)),
 		"examples":        prompt.Text(RenderExamples(ExamplesFor(req.Preset, examples))),
 		"artifacts":       prompt.Text(artifactsGuide(req.Preset)),
+		"screen_reader":   prompt.Text(screenReaderText(req.Preset)),
 	})
 	return text, schema, err
 }
@@ -107,6 +108,16 @@ func render(tmpl string, params map[string]prompt.Param) (string, error) {
 		return "", fmt.Errorf("agent: prompt has unknown placeholders: %s", strings.Join(res.Unreplaced, ", "))
 	}
 	return res.LLM, nil
+}
+
+// screenReaderText explains the screen readers' output and the focused
+// element when p perceives the focused element, and is empty otherwise, so
+// an agent that hears no screen reader isn't told about one.
+func screenReaderText(p preset.Preset) string {
+	if !p.Perceive.Focused {
+		return ""
+	}
+	return strings.TrimSpace(screenReaderGuide)
 }
 
 // artifactsGuide explains the artifact actions p allows, or is empty when it

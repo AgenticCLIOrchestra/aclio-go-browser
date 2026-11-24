@@ -87,6 +87,27 @@ func TestArtifactsGuideFollowsPreset(t *testing.T) {
 	}
 }
 
+// Only a preset that perceives the focused element is told about screen
+// readers: Default and Motor hear none.
+func TestScreenReaderGuideFollowsPreset(t *testing.T) {
+	for _, p := range []preset.Preset{preset.Default(), preset.Motor()} {
+		text, err := RenderInitial(initial(t, p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(text, "screen reader") || strings.Contains(text, "NVDA") || strings.Contains(text, PlaceholderScreenReader) {
+			t.Errorf("%s preset hears no screen reader, but the prompt explains one", p.Name)
+		}
+	}
+	text, err := RenderInitial(initial(t, preset.Blind()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "VoiceOver and NVDA") || !strings.Contains(text, "A focused element, when given") {
+		t.Error("blind preset's prompt doesn't explain the screen readers")
+	}
+}
+
 func TestCustomTemplate(t *testing.T) {
 	req := initial(t, preset.Default())
 
