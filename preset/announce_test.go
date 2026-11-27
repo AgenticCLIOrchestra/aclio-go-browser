@@ -2,6 +2,7 @@ package preset
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -118,6 +119,61 @@ func TestAnnounceActiveDescendant(t *testing.T) {
 	hidden := &ActiveDescendant{NodeID: 13, AXState: AXState{Ignored: true, IgnoredReasons: []string{"ariaHiddenElement"}}}
 	if got := Announce(lb(hidden), lb(a), ""); len(got) != 0 {
 		t.Errorf("hidden item = %q, want nothing", got)
+	}
+}
+
+// NVDA says "not selected" for a selectable item that isn't selected, on
+// arrival and when it is deselected in place; VoiceOver never does. Both say
+// "selected" alike, and NVDA says nothing extra for items that aren't
+// selectable or whose role it doesn't report it for.
+func TestAnnounceAllNotSelected(t *testing.T) {
+	both := func(text string) Announcement { return Announcement{Text: text, VoiceOver: true, NVDA: true} }
+	nvda := func(text string) Announcement { return Announcement{Text: text, NVDA: true} }
+	lb := func(ad *ActiveDescendant) *FocusedElement {
+		return &FocusedElement{Role: ptr("listbox"), Name: ptr("Fruit"), NodeID: 10, AXState: AXState{Multiselectable: true}, ActiveDescendant: ad}
+	}
+	opt := func(id int, name string, selected *bool) *ActiveDescendant {
+		return &ActiveDescendant{Role: ptr("option"), Name: ptr(name), NodeID: id, AXState: AXState{Selected: selected}, PosInSet: ptr(id - 10), SetSize: ptr(3)}
+	}
+	apple, banana := opt(11, "Apple", ptr(true)), opt(12, "Banana", ptr(false))
+
+	if got, want := AnnounceAll(lb(banana), lb(apple), ""), []Announcement{both("Banana"), nvda("not selected"), both("2 of 3")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("arrive on an unselected option = %v, want %v", got, want)
+	}
+	if got, want := AnnounceAll(lb(apple), lb(banana), ""), []Announcement{both("Apple"), both("selected"), both("1 of 3")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("arrive on a selected option = %v, want %v", got, want)
+	}
+	deselected := opt(11, "Apple", ptr(false))
+	if got, want := AnnounceAll(lb(deselected), lb(apple), ""), []Announcement{nvda("not selected")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("deselect in place = %v, want %v", got, want)
+	}
+	if got, want := AnnounceAll(lb(apple), lb(deselected), ""), []Announcement{both("selected")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("select in place = %v, want %v", got, want)
+	}
+	// Single-select lists too: NVDA's rule doesn't depend on multiselectable.
+	single := &FocusedElement{Role: ptr("listbox"), Name: ptr("Fruit"), NodeID: 10, ActiveDescendant: banana}
+	if got := NVDASaid(AnnounceAll(single, nil, "")); !slices.Contains(got, "not selected") {
+		t.Errorf("single-select unselected option, NVDA = %q", got)
+	}
+	// An option with no aria-selected is "not selected" to NVDA too.
+	if got, want := AnnounceAll(lb(opt(13, "Cherry", nil)), lb(banana), ""), []Announcement{both("Cherry"), nvda("not selected"), both("3 of 3")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("option with no aria-selected = %v, want %v", got, want)
+	}
+	// Not selectable (no selected state on a non-option), or a role NVDA
+	// doesn't report it for.
+	for _, fe := range []*FocusedElement{
+		{Role: ptr("treeitem"), Name: ptr("Docs"), NodeID: 22},
+		{Role: ptr("checkbox"), Name: ptr("Agree"), NodeID: 23, AXState: AXState{Checked: ptr("false")}},
+		{Role: ptr("tab"), Name: ptr("Home"), NodeID: 20, AXState: AXState{Selected: ptr(false)}},
+		{Role: ptr("radio"), Name: ptr("Asc"), NodeID: 21, AXState: AXState{Checked: ptr("false")}},
+	} {
+		if got := AnnounceAll(fe, nil, ""); !reflect.DeepEqual(NVDASaid(got), VoiceOverSaid(got)) {
+			t.Errorf("%s: NVDA %q, VoiceOver %q, want the same", deref(fe.Name), NVDASaid(got), VoiceOverSaid(got))
+		}
+	}
+	// Announce stays VoiceOver's feed.
+	if got := Announce(lb(banana), lb(apple), ""); slices.Contains(got, "not selected") {
+		t.Errorf("Announce = %q, want no not selected", got)
 	}
 }
 

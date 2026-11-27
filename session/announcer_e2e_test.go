@@ -63,6 +63,24 @@ document.getElementById('s').addEventListener('input', (e) => {
 // Remounts every message, as a React re-render that keys them afresh does.
 window.rerender = () => { const log = document.getElementById('log'); log.innerHTML = Array.from(log.children, (p) => '<p>' + p.textContent + '</p>').join(''); };
 </script>`,
+		"/multi": `<!doctype html><title>Multi</title>
+<div role="listbox" id="lb" tabindex="0" aria-label="Fruit" aria-multiselectable="true" aria-activedescendant="o1">
+<div role="option" id="o1" aria-selected="true">Apple</div>
+<div role="option" id="o2" aria-selected="false">Banana</div>
+<div role="option" id="o3">Cherry</div>
+</div>
+<script>
+const lb = document.getElementById('lb');
+const opts = Array.from(lb.children);
+lb.addEventListener('keydown', (e) => {
+  const i = opts.findIndex((o) => o.id === lb.getAttribute('aria-activedescendant'));
+  if (e.key === 'ArrowDown' && i < opts.length - 1) lb.setAttribute('aria-activedescendant', opts[i + 1].id);
+  else if (e.key === 'ArrowUp' && i > 0) lb.setAttribute('aria-activedescendant', opts[i - 1].id);
+  else if (e.key === ' ') { const o = opts[i]; o.setAttribute('aria-selected', o.getAttribute('aria-selected') === 'true' ? 'false' : 'true'); }
+  else return;
+  e.preventDefault();
+});
+</script>`,
 		"/frame": `<!doctype html><title>Frame</title><button id="go">Go</button>
 <iframe srcdoc="<div role=status id=s></div>"></iframe>`,
 		"/alert": `<!doctype html><title>Alert</title><button id="go" onclick="
@@ -528,5 +546,42 @@ func TestE2ELiveRegionNVDA(t *testing.T) {
 	}
 	if want := []string{"Q A", "Ask", "button", "Q A", "New", "Q A New"}; !reflect.DeepEqual(nvda, want) {
 		t.Errorf("NVDA said %q, want %q", nvda, want)
+	}
+}
+
+// In a real multi-select listbox, NVDA says "not selected" for an unselected
+// option, on arrival and when Space deselects it; VoiceOver doesn't. An
+// option with no aria-selected at all is reported as Chromium exposes it.
+func TestE2ENotSelected(t *testing.T) {
+	e2e(t)
+	b := openAnnouncing(t, liveServer(t), "/multi")
+	do(t, b, press("Tab"))
+	vo, nvda := heardBoth(t, b, "", time.Second)
+	if want := []string{"Fruit", "list box", "Apple", "selected", "1 of 3"}; !reflect.DeepEqual(vo, want) || !reflect.DeepEqual(nvda, want) {
+		t.Errorf("enter: VoiceOver %q, NVDA %q, want both %q", vo, nvda, want)
+	}
+	do(t, b, press("ArrowDown"))
+	vo, nvda = heardBoth(t, b, "", time.Second)
+	if want := []string{"Banana", "2 of 3"}; !reflect.DeepEqual(vo, want) {
+		t.Errorf("arrive on Banana: VoiceOver %q, want %q", vo, want)
+	}
+	if want := []string{"Banana", "not selected", "2 of 3"}; !reflect.DeepEqual(nvda, want) {
+		t.Errorf("arrive on Banana: NVDA %q, want %q", nvda, want)
+	}
+	do(t, b, press("ArrowUp"), press("Space"))
+	vo, nvda = heardBoth(t, b, "", time.Second)
+	if want := []string{"Apple", "selected", "1 of 3"}; !reflect.DeepEqual(vo, want) {
+		t.Errorf("deselect Apple: VoiceOver %q, want %q", vo, want)
+	}
+	if want := []string{"Apple", "selected", "1 of 3", "not selected"}; !reflect.DeepEqual(nvda, want) {
+		t.Errorf("deselect Apple: NVDA %q, want %q", nvda, want)
+	}
+	do(t, b, press("ArrowDown"), press("ArrowDown"))
+	vo, nvda = heardBoth(t, b, "", time.Second)
+	if want := []string{"Banana", "2 of 3", "Cherry", "3 of 3"}; !reflect.DeepEqual(vo, want) {
+		t.Errorf("on to Cherry: VoiceOver %q, want %q", vo, want)
+	}
+	if want := []string{"Banana", "not selected", "2 of 3", "Cherry", "not selected", "3 of 3"}; !reflect.DeepEqual(nvda, want) {
+		t.Errorf("on to Cherry (no aria-selected): NVDA %q, want %q", nvda, want)
 	}
 }
