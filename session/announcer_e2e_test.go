@@ -361,26 +361,23 @@ func do(t *testing.T, b *Browser, actions ...action.Action) {
 }
 
 // heard collects what VoiceOver says for a while: until it has said last, or
-// for wait when last is "" (to show something stays silent). Where nothing
-// was re-inserted with identical text, NVDA must have said the same.
+// for wait when last is "" (to show something stays silent).
 func heard(t *testing.T, b *Browser, last string, wait time.Duration) []string {
 	t.Helper()
-	vo, nvda := heardBoth(t, b, last, wait)
-	if !reflect.DeepEqual(vo, nvda) {
-		t.Errorf("NVDA said %q, VoiceOver %q", nvda, vo)
-	}
+	vo, _ := heardBoth(t, b, last, wait)
 	return vo
 }
 
-// heardBoth collects what each screen reader says, until NVDA has said last,
-// or for wait when last is "".
+// heardBoth collects what each screen reader says, until either has said
+// last, or for wait when last is "".
 func heardBoth(t *testing.T, b *Browser, last string, wait time.Duration) (vo, nvda []string) {
 	t.Helper()
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
 		said := TakeAnnouncements(b)
 		vo, nvda = append(vo, preset.VoiceOverSaid(said)...), append(nvda, preset.NVDASaid(said)...)
-		if last != "" && len(nvda) > 0 && nvda[len(nvda)-1] == last {
+		ends := func(said []string) bool { return len(said) > 0 && said[len(said)-1] == last }
+		if last != "" && (ends(vo) || ends(nvda)) {
 			return vo, nvda
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -509,10 +506,14 @@ func TestE2EAnnouncerFocusRegression(t *testing.T) {
 	srv := liveServer(t)
 	b := openAnnouncing(t, srv, "/form")
 	do(t, b, press("Tab"), press("Tab"), typeText("#b", "x"))
-	said := heard(t, b, "", 500*time.Millisecond)
+	said, nvda := heardBoth(t, b, "", 500*time.Millisecond)
 	want := []string{"main", "Prefs", "form", "First", "edit text", "Second", "edit text", "x"}
 	if !reflect.DeepEqual(said, want) {
 		t.Errorf("said %q, want %q", said, want)
+	}
+	// The same steps in NVDA's wording and order.
+	if want := []string{"main landmark", "Prefs", "form", "First", "edit", "Second", "edit", "x"}; !reflect.DeepEqual(nvda, want) {
+		t.Errorf("NVDA said %q, want %q", nvda, want)
 	}
 
 	quiet, _ := open(t, engine.Chromium)
@@ -550,15 +551,20 @@ func TestE2ELiveRegionNVDA(t *testing.T) {
 }
 
 // In a real multi-select listbox, NVDA says "not selected" for an unselected
-// option, on arrival and when Space deselects it; VoiceOver doesn't. An
-// option with no aria-selected at all is reported as Chromium exposes it.
+// option, on arrival and when Space deselects it; VoiceOver doesn't. NVDA
+// doesn't say "selected" on arriving at a selected option (VoiceOver does),
+// and words the rest its own way ("list" for the listbox). An option with no
+// aria-selected at all is reported as Chromium exposes it.
 func TestE2ENotSelected(t *testing.T) {
 	e2e(t)
 	b := openAnnouncing(t, liveServer(t), "/multi")
 	do(t, b, press("Tab"))
 	vo, nvda := heardBoth(t, b, "", time.Second)
-	if want := []string{"Fruit", "list box", "Apple", "selected", "1 of 3"}; !reflect.DeepEqual(vo, want) || !reflect.DeepEqual(nvda, want) {
-		t.Errorf("enter: VoiceOver %q, NVDA %q, want both %q", vo, nvda, want)
+	if want := []string{"Fruit", "list box", "Apple", "selected", "1 of 3"}; !reflect.DeepEqual(vo, want) {
+		t.Errorf("enter: VoiceOver %q, want %q", vo, want)
+	}
+	if want := []string{"Fruit", "list", "Apple", "1 of 3"}; !reflect.DeepEqual(nvda, want) {
+		t.Errorf("enter: NVDA %q, want %q", nvda, want)
 	}
 	do(t, b, press("ArrowDown"))
 	vo, nvda = heardBoth(t, b, "", time.Second)
@@ -573,7 +579,7 @@ func TestE2ENotSelected(t *testing.T) {
 	if want := []string{"Apple", "selected", "1 of 3"}; !reflect.DeepEqual(vo, want) {
 		t.Errorf("deselect Apple: VoiceOver %q, want %q", vo, want)
 	}
-	if want := []string{"Apple", "selected", "1 of 3", "not selected"}; !reflect.DeepEqual(nvda, want) {
+	if want := []string{"Apple", "1 of 3", "not selected"}; !reflect.DeepEqual(nvda, want) {
 		t.Errorf("deselect Apple: NVDA %q, want %q", nvda, want)
 	}
 	do(t, b, press("ArrowDown"), press("ArrowDown"))

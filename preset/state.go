@@ -18,11 +18,14 @@ type State struct {
 }
 
 // Announcement is one item a screen reader spoke, and which of the two
-// modelled screen readers spoke it. Most items are spoken by both; NVDA alone
+// modelled screen readers spoke it. The two hear the same events, each in its
+// own wording and order (Announce for VoiceOver, AnnounceNVDA for NVDA,
+// merged by AnnounceAll), so an item both say (a name, a live region's text)
+// is marked for both, and a word only one uses (e.g. NVDA's "not selected"
+// for a selectable item that isn't selected) for that one. NVDA alone also
 // speaks what a live region re-inserts with identical text (it reads every
 // node inserted into a live region, while VoiceOver skips a change whose
-// text is identical) and "not selected" for a selectable item that isn't
-// selected (see AnnounceAll). The wording is VoiceOver's for both.
+// text is identical).
 type Announcement struct {
 	Text      string `json:"text"`
 	VoiceOver bool   `json:"voiceOver"`

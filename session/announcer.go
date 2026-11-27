@@ -14,11 +14,12 @@ import (
 // the state the page ends a turn in, and so is what the page announces in
 // its live regions. The page queues the element focused at each such event,
 // and the text each live region change speaks (announcerJS); Go turns each
-// focus entry into announcements with preset.AnnounceAll, against the one
-// before, and takes each live entry as spoken. Each item is marked with which
-// of the two modelled screen readers says it: both, except for live region
-// nodes replaced by nodes with identical text and "not selected" for an
-// unselected item, which only NVDA speaks. The
+// focus entry into announcements for both screen readers with
+// preset.AnnounceAll (VoiceOver's wording from preset.Announce, NVDA's from
+// preset.AnnounceNVDA), against the one before, and takes each live entry as
+// spoken by both, except for live region nodes replaced by nodes with
+// identical text, which only NVDA speaks. Each item is marked with which
+// screen readers say it. The
 // queue is processed in the background when the page signals, after each
 // action Perform runs, and when the announcements are taken.
 type announcer struct {
@@ -400,9 +401,9 @@ func StartAnnouncing(b *Browser, lang preset.Language) error {
 // TakeAnnouncements returns everything the screen readers have said since
 // the last call (or since StartAnnouncing), one spoken item each, in order,
 // and forgets it. Each item says whether VoiceOver, NVDA or both spoke it:
-// both, except for what a live region re-inserted with identical text and
-// "not selected" for an unselected item (see preset.AnnounceAll), which only
-// NVDA says (preset.VoiceOverSaid / preset.NVDASaid give each feed).
+// the two hear the same events, each in its own wording and order (see
+// preset.AnnounceAll), and only NVDA reads what a live region re-inserted
+// with identical text (preset.VoiceOverSaid / preset.NVDASaid give each feed).
 // It is empty when nothing was said, and nil when b isn't announcing.
 func TakeAnnouncements(b *Browser) []preset.Announcement {
 	if b == nil || b.announcer == nil {

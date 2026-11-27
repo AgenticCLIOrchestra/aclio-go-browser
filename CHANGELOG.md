@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.0] - 2026-11-27
+
+### Added
+- `preset.AnnounceNVDA(cur, prev)`: a focus announcement in NVDA's own wording and order, taken from NVDA's source (its role and state labels and speech rules) and from how Chrome exposes each ARIA role to it on Windows. The order is name, role, value, states, description, keyboard shortcut (`aria-keyshortcuts`), position, level. Its words include "edit", "check box", "checked" / "not checked" / "half checked" (radios too), "toggle button" with "pressed" / "not pressed", "menu button" with "subMenu" / "opens dialog" / "opens list", "combo box" for a native `<select>` too, "unavailable", "invalid entry", "has auto complete", "tool bar", "tree view", "graphic", and "main landmark" / "navigation landmark" / … for landmarks. It doesn't speak the role of a named option, menu item or tree item, says a tree item's level first when it changes, and says nothing for unnamed groupings, list items, rows and cells it passes through. NVDA has one English locale, so it takes no `Language`
+
+### Changed
+- The NVDA feed now uses NVDA's wording and order everywhere, from `AnnounceNVDA`, instead of VoiceOver's. The VoiceOver feed is unchanged. `preset.AnnounceAll` merges the two by aligning them, so an item both say (a name, a position, a live region's text) is one item for both, and a word only one of them uses is marked for that one
+- The NVDA feed no longer says "selected" on arriving at a selected option, tree item or menu item, as NVDA's state rules leave it out on focus; it still says "selected" when the item becomes selected, and "not selected" as before
+- `DefaultInitialPrompt` tells the agent that the two screen readers word things differently, and that a difference in wording alone isn't a finding
+
 ## [0.22.0] - 2026-11-27
 
 ### Added
@@ -216,6 +226,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.23.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.19.0...v0.20.0
