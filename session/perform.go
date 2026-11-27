@@ -126,8 +126,14 @@ func perform(b *Browser, a action.Action) (*string, error) {
 			if err := focus(page, *d.Target); err != nil {
 				return nil, err
 			}
+			// Focusing a field in browse mode switches NVDA to focus mode
+			// before the first key.
+			processAnnouncements(b.announcer)
 		}
-		return nil, keyboard.Type(d.Text)
+		if NVDAMode(b) != action.NVDAModeBrowse {
+			return nil, keyboard.Type(d.Text)
+		}
+		return typeThroughNVDA(b, d.Text)
 	case action.Fill:
 		if d.Target.Selector != nil {
 			return nil, page.Locator(*d.Target.Selector).Fill(d.Value)
@@ -138,6 +144,9 @@ func perform(b *Browser, a action.Action) (*string, error) {
 		}
 		return nil, el.Fill(d.Value)
 	case action.Press:
+		if handled, result, err := nvdaKey(b, d.Key); handled {
+			return result, err
+		}
 		return nil, keyboard.Press(d.Key)
 	case action.Wait:
 		page.WaitForTimeout(float64(d.Milliseconds))

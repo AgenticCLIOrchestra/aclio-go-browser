@@ -208,11 +208,47 @@ When NVDA said the same, its part is one line, `NVDA said the same.`
 only what NVDA says is recorded, as NVDA's alone, until the mode is `Focus` again, since VoiceOver has no such modes.
 Every turn VoiceOver is off, `DescribeAnnouncement` says so first
 (`VoiceOver is off because NVDA's mode is set to "Browse", not "Focus". …`), then what VoiceOver said before it was
-turned off, then NVDA's feed in full. Only the mode and VoiceOver are simulated: NVDA itself goes on speaking as in
-focus mode, and its prompt paragraph tells the agent so. `Preset.NVDAModes` limits the modes a preset may set (nil: all
+turned off, then NVDA's feed in full. `Browse` is simulated in full (see below); the other modes only turn VoiceOver
+off, NVDA going on speaking as in focus mode there, and the prompt tells the agent so. `Preset.NVDAModes` limits the modes a preset may set (nil: all
 of them; it must include `Focus`); `preset.Check` refuses the others and the schema doesn't offer them. `Blind()` leaves
 out `Sleep` and `Speech`: both silence NVDA, which, with VoiceOver off, would leave a blind user with no speech at all.
 `Default()`, `Full()` and `Motor()` hear no screen reader, so they don't get the action.
+
+**Browse mode.** In `Browse`, NVDA reads the page as NVDA users do, following NVDA's own source (`browseMode`,
+`cursorManager`, the speech and presentation rules) with its defaults:
+
+- **The virtual buffer:** the active tab's main frame as lines, built from Chromium's accessibility tree (what NVDA
+  reads through Chrome) and each element's CSS `display` (a block starts a new line, inline content stays on it),
+  wrapping at 100 characters. A link, button, heading or form field is read as one piece.
+- **Reading keys** (the `press` action): ArrowDown / ArrowUp read the next / previous line (at either end, the same line
+  again), ArrowRight / ArrowLeft a character, Control+ArrowRight / Control+ArrowLeft a word, Home / End the line's
+  first / last character, PageDown / PageUp move 25 lines, Control+Home / Control+End go to the top / bottom, and
+  NVDA+ArrowDown reads to the end (say all, up to 200 lines per key press). NVDA's modifier is written `NVDA+`,
+  `Insert+` or `CapsLock+`.
+- **Quick navigation:** H (heading), 1–6 (heading of that level), K (link), F (form field), E (edit field), B (button),
+  X (check box), R (radio button), C (combo box), L (list), I (list item), G (graphic), D (landmark), T (table),
+  S (separator), Q (block quote); with Shift, backwards. When there is none: "no next heading", "no previous link", ….
+- **What it says:** line reading puts a field's role and states before its content ("link", "terms"); quick navigation
+  and focus changes put the content first ("terms", "link"). Containers are announced when the cursor enters them
+  ("list", "with 2 items", "main landmark", "Prefs", "form", tables "with 3 rows and 4 columns") and, except landmarks,
+  when it leaves them ("out of list"). Unnamed groupings and regions are layout and say nothing. List bullets are read
+  as "bullet". A field's name isn't repeated when its label was just read on the same line.
+- **Keys kept from the page:** every key above, Enter and Space (which activate what the cursor is on: a link or button
+  is clicked, a field is focused), and any other character key, as NVDA traps keys with no command. So `type` in
+  browse mode sends each character to NVDA: letters jump around instead of typing, and the action's result says how
+  many characters NVDA took. Tab, Escape, function keys and Control/Alt shortcuts still reach the page.
+- **Switching:** like NVDA, it switches to focus mode by itself when focus lands on a text field or a widget it can't
+  operate in browse mode (combo box, list box, option, slider, tab list, menu, menu item, tree, tree item, spin button,
+  grid cell, radio button, tab, or anything in a toolbar), with VoiceOver back on, and back to browse mode when focus
+  moves on to something else or on Escape. Focus mode set by hand (`nvdaChangeMode`, NVDA+Space, the default) stays
+  until changed, and Escape then reaches the page. Each switch between the two plays NVDA's sound, recorded in the NVDA
+  feed as `(sound: focus mode)` / `(sound: browse mode)`. In browse mode a focus change reads the focused element
+  content first and moves the reading cursor to it.
+
+It doesn't yet read table cell coordinates and headers, reach into iframes, report text selection, or speak the page on
+load (NVDA's say all on page load); NVDA's elements list (NVDA+F7) and the quick navigation keys for frames, embedded
+objects, annotations, errors, visited / unvisited links, paragraphs and links blocks aren't simulated (letters with no
+simulated command are kept from the page, as unbound keys are).
 
 It is recorded as it happens, not worked out from where the page ends up: `Run` and `Loop` call `session.StartAnnouncing` for a preset that perceives the focused element. From then on the page queues the element focused at every `focusin`, and at every change to the focused element or its active descendant (`input`, `change`, and the attributes a screen reader announces). Go turns each into an announcement, in the background as the page signals, after each action `Perform` runs, and when a turn takes them with `session.TakeAnnouncements`, which also empties the store. So a batch of actions (Tab, Tab, Space, …) is heard step by step, and so are changes the page makes by itself, such as a dialog taking focus while the agent is thinking. Switching tabs announces where focus is in the new one. Focus inside iframes isn't heard yet.
 

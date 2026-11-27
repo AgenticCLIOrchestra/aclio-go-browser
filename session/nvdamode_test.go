@@ -9,9 +9,11 @@ import (
 )
 
 // Any NVDA mode but Focus turns VoiceOver off: from then on only what NVDA
-// says is kept, as NVDA's alone, until the mode is Focus again.
+// says is kept, as NVDA's alone, until the mode is Focus again. Switching
+// between browse and focus mode plays NVDA's mode sound.
 func TestNVDAModeTurnsVoiceOverOff(t *testing.T) {
-	b := &Browser{announcer: &announcer{}}
+	b := &Browser{}
+	b.announcer = &announcer{nvda: nvdaOf(b)}
 	if got := NVDAMode(b); got != action.NVDAModeFocus {
 		t.Errorf("initial mode = %q", got)
 	}
@@ -28,7 +30,10 @@ func TestNVDAModeTurnsVoiceOverOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	appendSaid(b.announcer, voOnly)
-	want := []preset.Announcement{both, {Text: "Save", NVDA: true}, nvdaOnly, voOnly}
+	want := []preset.Announcement{
+		both, {Text: "(sound: browse mode)", NVDA: true}, {Text: "Save", NVDA: true}, nvdaOnly,
+		{Text: "(sound: focus mode)", NVDA: true}, voOnly,
+	}
 	if got := b.announcer.said; !reflect.DeepEqual(got, want) {
 		t.Errorf("said = %+v\nwant %+v", got, want)
 	}

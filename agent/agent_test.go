@@ -112,6 +112,9 @@ func TestScreenReaderGuideFollowsPreset(t *testing.T) {
 	if strings.Contains(text, `"Sleep"`) || strings.Contains(text, `"Speech"`) {
 		t.Error("blind preset's prompt offers a mode it doesn't allow")
 	}
+	if !strings.Contains(text, `In "Browse" mode NVDA reads the page`) || !strings.Contains(text, "NVDA+ArrowDown") {
+		t.Error("blind preset's prompt doesn't explain browse mode's keys")
+	}
 	// A preset that hears the screen readers but can't change NVDA's mode
 	// isn't told about the action.
 	custom := preset.Blind()
