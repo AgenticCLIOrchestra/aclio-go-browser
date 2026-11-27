@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.0] - 2026-11-27
+
+### Added
+- NVDA's one-key pass-through. The `One-key pass-through` mode, or NVDA+F2 in any mode (as NVDA's `passNextKeyThrough`), lasts one key: NVDA says "Pass next key through", the next key goes straight to the page whatever NVDA would do with it (in browse mode, a letter types instead of jumping, an arrow key reaches the page), and NVDA is then back in the mode it was in, including whether it had entered focus mode by itself. With `type`, the first character goes through and the rest go to NVDA again. The action's result says the key was passed through and which mode NVDA is back in
+
+### Changed
+- `DefaultInitialPrompt` explains one-key pass-through to a preset that allows it, and names the modes that still only turn VoiceOver off (`Speech`, `Sleep`, `Input help`, `Review`, `Native selection`) instead of "the other modes"
+
 ## [0.25.0] - 2026-11-27
 
 ### Added
@@ -256,6 +264,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.26.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.22.0...v0.23.0

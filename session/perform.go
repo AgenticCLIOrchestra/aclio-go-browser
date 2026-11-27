@@ -130,7 +130,7 @@ func perform(b *Browser, a action.Action) (*string, error) {
 			// before the first key.
 			processAnnouncements(b.announcer)
 		}
-		if NVDAMode(b) != action.NVDAModeBrowse {
+		if m := NVDAMode(b); m != action.NVDAModeBrowse && m != action.NVDAModeOneKeyPass {
 			return nil, keyboard.Type(d.Text)
 		}
 		return typeThroughNVDA(b, d.Text)
@@ -144,10 +144,11 @@ func perform(b *Browser, a action.Action) (*string, error) {
 		}
 		return nil, el.Fill(d.Value)
 	case action.Press:
-		if handled, result, err := nvdaKey(b, d.Key); handled {
+		handled, result, err := nvdaKey(b, d.Key)
+		if handled {
 			return result, err
 		}
-		return nil, keyboard.Press(d.Key)
+		return result, keyboard.Press(d.Key) // result: e.g. NVDA passed it through
 	case action.Wait:
 		page.WaitForTimeout(float64(d.Milliseconds))
 		return nil, nil

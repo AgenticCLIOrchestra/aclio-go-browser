@@ -208,8 +208,12 @@ When NVDA said the same, its part is one line, `NVDA said the same.`
 only what NVDA says is recorded, as NVDA's alone, until the mode is `Focus` again, since VoiceOver has no such modes.
 Every turn VoiceOver is off, `DescribeAnnouncement` says so first
 (`VoiceOver is off because NVDA's mode is set to "Browse", not "Focus". …`), then what VoiceOver said before it was
-turned off, then NVDA's feed in full. `Browse` is simulated in full (see below); the other modes only turn VoiceOver
-off, NVDA going on speaking as in focus mode there, and the prompt tells the agent so. `Preset.NVDAModes` limits the modes a preset may set (nil: all
+turned off, then NVDA's feed in full. `Browse` is simulated in full (see below), and so is `One-key pass-through`
+(also NVDA+F2, in any mode, as NVDA's `passNextKeyThrough`): NVDA says "Pass next key through", the next key goes
+straight to the page whatever NVDA would do with it (a `type` action's first character, the rest going to NVDA again),
+the action's result says so, and NVDA is then back in the mode it was in. `Speech`, `Sleep`, `Input help`, `Review`
+and `Native selection` only turn VoiceOver off, NVDA going on speaking as in focus mode there, and the prompt tells
+the agent so. `Preset.NVDAModes` limits the modes a preset may set (nil: all
 of them; it must include `Focus`); `preset.Check` refuses the others and the schema doesn't offer them. `Blind()` leaves
 out `Sleep` and `Speech`: both silence NVDA, which, with VoiceOver off, would leave a blind user with no speech at all.
 `Default()`, `Full()` and `Motor()` hear no screen reader, so they don't get the action.

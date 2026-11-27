@@ -160,12 +160,28 @@ mode (a combo box, list box, tree, menu, radio button, tab, …), and back to
 NVDA+Space switches by hand. Switching plays a sound, shown as "(sound: focus
 mode)" / "(sound: browse mode)".`
 	}
-	if len(allowed) > 2 {
-		text += `
+	if slices.Contains(allowed, action.NVDAModeOneKeyPass) {
+		text += fmt.Sprintf(`
 
-The other modes only turn VoiceOver off: what NVDA does differently in them
-isn't simulated, so NVDA goes on speaking as in focus mode there, and you
-can't draw conclusions about those modes from it.`
+%q (or pressing NVDA+F2) lasts one key: NVDA says "Pass next key
+through", the next key goes straight to the page whatever NVDA would do with
+it (in browse mode, a letter types instead of jumping, an arrow key reaches the
+page), and NVDA is then back in the mode it was in.`, action.NVDAModeOneKeyPass)
+	}
+	var other []string
+	for _, m := range allowed {
+		switch m {
+		case action.NVDAModeFocus, action.NVDAModeBrowse, action.NVDAModeOneKeyPass:
+		default:
+			other = append(other, fmt.Sprintf("%q", m))
+		}
+	}
+	if len(other) > 0 {
+		text += fmt.Sprintf(`
+
+%s only turn VoiceOver off: what NVDA does differently in them isn't
+simulated, so NVDA goes on speaking as in focus mode there, and you can't draw
+conclusions about those modes from it.`, strings.Join(other, ", "))
 	}
 	return text
 }
