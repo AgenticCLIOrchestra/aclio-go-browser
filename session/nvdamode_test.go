@@ -187,3 +187,51 @@ func TestQuickNavWording(t *testing.T) {
 		}
 	}
 }
+
+// NVDA's review commands on its desktop layout: the numpad, Shift for top /
+// bottom and line ends, NVDA+Page Up / Down for pages, NumpadAdd for say all.
+func TestReviewCommands(t *testing.T) {
+	for in, want := range map[string]reviewCommand{
+		"Numpad7": reviewPreviousLine, "Numpad8": reviewCurrentLine, "Numpad9": reviewNextLine,
+		"Numpad4": reviewPreviousWord, "Numpad5": reviewCurrentWord, "Numpad6": reviewNextWord,
+		"Numpad1": reviewPreviousCharacter, "Numpad2": reviewCurrentCharacter, "Numpad3": reviewNextCharacter,
+		"Shift+Numpad7": reviewTop, "Shift+Numpad9": reviewBottom,
+		"Shift+Numpad1": reviewStartOfLine, "Shift+Numpad3": reviewEndOfLine,
+		"NVDA+PageUp": reviewPreviousPage, "NVDA+PageDown": reviewNextPage, "NumpadAdd": reviewSayAll,
+		"ArrowDown": reviewNone, "h": reviewNone, "Control+Numpad7": reviewNone, "PageDown": reviewNone,
+	} {
+		if got := reviewCommandOf(parseKey(in)); got != want {
+			t.Errorf("%s: %v, want %v", in, got, want)
+		}
+	}
+}
+
+// Review mode remembers the mode NVDA was in, keeps VoiceOver off (also while
+// its other keys act as in that mode), and setting another mode leaves it.
+func TestReviewMode(t *testing.T) {
+	b := &Browser{}
+	b.announcer = &announcer{nvda: nvdaOf(b)}
+	if err := setNVDAMode(b, action.NVDAModeReview); err != nil {
+		t.Fatal(err)
+	}
+	st := b.nvda
+	if NVDAMode(b) != action.NVDAModeReview || st.before != action.NVDAModeFocus || !st.inReview {
+		t.Errorf("entering: mode %q, before %q, inReview %v", NVDAMode(b), st.before, st.inReview)
+	}
+	if got := preset.NVDASaid(b.announcer.said); !reflect.DeepEqual(got, []string{"Document review"}) {
+		t.Errorf("entering: NVDA said %q", got)
+	}
+	st.mode = st.before // as while its other keys are handled
+	b.announcer.said = nil
+	appendSaid(b.announcer, preset.Announcement{Text: "Save", VoiceOver: true, NVDA: true})
+	if got := b.announcer.said; len(got) != 1 || got[0].VoiceOver {
+		t.Errorf("VoiceOver should stay off in review mode: %+v", got)
+	}
+	st.mode = action.NVDAModeReview
+	if err := setNVDAMode(b, action.NVDAModeBrowse); err != nil {
+		t.Fatal(err)
+	}
+	if NVDAMode(b) != action.NVDAModeBrowse || st.inReview {
+		t.Errorf("leaving: mode %q, inReview %v", NVDAMode(b), st.inReview)
+	}
+}

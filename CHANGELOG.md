@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.0] - 2026-11-27
+
+### Added
+- NVDA's review cursor. The `Review` mode turns on document review (NVDA says "Document review"): a review cursor that reads the virtual buffer without moving focus, the page or the browse mode cursor, with NVDA's review commands on its desktop keyboard layout, as its `script_review_*` commands do:
+  - Numpad7 / Numpad8 / Numpad9 the previous / current / next line, Numpad4 / 5 / 6 the word, Numpad1 / 2 / 3 the character
+  - Shift+Numpad7 / Shift+Numpad9 the top / bottom line, Shift+Numpad1 / Shift+Numpad3 the start / end of the line
+  - NumpadAdd say all; NVDA+PageUp / NVDA+PageDown say "Movement by page not supported", as a virtual buffer has no page unit
+- At the edges NVDA says "Top" / "Bottom" (lines and words) or "Left" / "Right" (characters, which stay on the line) and reads what's there again. Each review command's result says focus, the page and the browse mode cursor didn't move
+- Other keys in review mode do what they did in the mode NVDA was in (browse mode's quick navigation, or keys reaching the page), and the review cursor follows focus and the browse mode cursor (NVDA's `followFocus` / `followCaret`, on by default). VoiceOver stays off throughout. Setting another mode leaves it
+
+### Changed
+- `DefaultInitialPrompt` explains review mode to a preset that allows it
+
 ## [0.27.0] - 2026-11-27
 
 ### Added
@@ -279,6 +292,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.28.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.24.0...v0.25.0

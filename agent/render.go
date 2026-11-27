@@ -178,10 +178,24 @@ heading"; a key NVDA has no description for says only its name). Nothing
 happens and no key reaches the page until you press NVDA+1 again (or set
 another mode), and NVDA is back in the mode it was in.`, action.NVDAModeInputHelp)
 	}
+	if slices.Contains(allowed, action.NVDAModeReview) {
+		text += fmt.Sprintf(`
+
+%q turns on NVDA's review cursor (document review: NVDA says "Document
+review"), which reads the page without moving focus, the page or the browse
+mode cursor, with NVDA's numpad review keys: Numpad7 / Numpad8 / Numpad9 the
+previous / current / next line, Numpad4 / Numpad5 / Numpad6 the word, Numpad1 /
+Numpad2 / Numpad3 the character, Shift+Numpad7 / Shift+Numpad9 the top /
+bottom line, Shift+Numpad1 / Shift+Numpad3 the start / end of the line, and
+NumpadAdd reads to the end. At the edges NVDA says "Top", "Bottom", "Left" or
+"Right" and reads what's there again. Every other key does what it did in the
+mode NVDA was in, and the review cursor follows focus and the browse mode
+cursor. Set another mode to leave it.`, action.NVDAModeReview)
+	}
 	var other []string
 	for _, m := range allowed {
 		switch m {
-		case action.NVDAModeFocus, action.NVDAModeBrowse, action.NVDAModeOneKeyPass, action.NVDAModeInputHelp:
+		case action.NVDAModeFocus, action.NVDAModeBrowse, action.NVDAModeOneKeyPass, action.NVDAModeInputHelp, action.NVDAModeReview:
 		default:
 			other = append(other, fmt.Sprintf("%q", m))
 		}

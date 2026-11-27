@@ -214,3 +214,58 @@ func TestE2EInputHelp(t *testing.T) {
 		t.Errorf("h after input help: NVDA %q", nvda)
 	}
 }
+
+// Review mode reads with NVDA's review cursor and its numpad keys, without
+// moving the browse mode cursor or reaching the page; at the edges NVDA says
+// "Top", "Bottom", "Left" or "Right". Other keys act as in browse mode.
+func TestE2EReviewMode(t *testing.T) {
+	e2e(t)
+	b := openAnnouncing(t, liveServer(t), "/doc")
+	keys := func() string {
+		v, _ := b.active.Evaluate(`() => window.keys.join(",")`)
+		s, _ := v.(string)
+		return s
+	}
+	browseStep(t, b, nvdaMode(action.NVDAModeBrowse), press("Control+Home"))
+	if nvda, vo, _ := browseStep(t, b, nvdaMode(action.NVDAModeReview)); !reflect.DeepEqual(nvda, []string{"Document review"}) || len(vo) != 0 {
+		t.Errorf("entering review: NVDA %q, VoiceOver %q", nvda, vo)
+	}
+	for _, c := range []struct {
+		key  string
+		want []string
+	}{
+		{"Numpad8", []string{"heading", "level 1", "Welcome"}},
+		{"Numpad7", []string{"Top", "heading", "level 1", "Welcome"}},
+		{"Numpad9", []string{"Read the", "link", "terms", "first."}},
+		{"Numpad6", []string{"the"}},
+		{"Numpad5", []string{"the"}},
+		{"Numpad1", []string{"space"}},
+		{"Shift+Numpad1", []string{"R"}},
+		{"Numpad1", []string{"Left", "R"}},
+		{"Shift+Numpad9", []string{"Query", "edit", "button", "Go"}},
+		{"Numpad9", []string{"Bottom", "Query", "edit", "button", "Go"}},
+		{"NVDA+PageDown", []string{"Movement by page not supported"}},
+	} {
+		nvda, vo, results := browseStep(t, b, press(c.key))
+		if !reflect.DeepEqual(nvda, c.want) || len(vo) != 0 {
+			t.Errorf("%s: NVDA %q (VoiceOver %q), want %q", c.key, nvda, vo, c.want)
+		}
+		if len(results) != 1 || !strings.Contains(results[0], "review cursor") {
+			t.Errorf("%s: results %q", c.key, results)
+		}
+	}
+	if keys() != "" {
+		t.Errorf("review keys reached the page: %q", keys())
+	}
+	// The browse mode cursor stayed at the top: H, a browse mode key here,
+	// finds the second heading next, and the review cursor follows it.
+	if nvda, _, _ := browseStep(t, b, press("h")); !reflect.DeepEqual(nvda, []string{"Search", "heading", "level 2"}) || NVDAMode(b) != action.NVDAModeReview {
+		t.Errorf("h in review mode: NVDA %q, mode %q", nvda, NVDAMode(b))
+	}
+	if nvda, _, _ := browseStep(t, b, press("Numpad8")); !reflect.DeepEqual(nvda, []string{"heading", "level 2", "Search"}) {
+		t.Errorf("review after h: NVDA %q", nvda)
+	}
+	if nvda, _, _ := browseStep(t, b, nvdaMode(action.NVDAModeBrowse)); NVDAMode(b) != action.NVDAModeBrowse || len(nvda) != 0 {
+		t.Errorf("leaving review: mode %q, NVDA %q", NVDAMode(b), nvda)
+	}
+}

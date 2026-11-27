@@ -27,8 +27,13 @@ type nvdaState struct {
 	// hand (nvdaChangeMode, NVDA+Space, the default) stays until changed.
 	auto bool
 	// before is the mode to go back to once one-key pass-through has let
-	// its key through.
+	// its key through, input help is turned off or review mode is left.
 	before action.NVDAMode
+	// inReview is set while in review mode, also while its other keys are
+	// handled as in the mode NVDA was in (VoiceOver stays off).
+	inReview bool
+	// review is the review cursor (see review.go).
+	review cursorState
 	// The reading cursor: a line of the virtual buffer and a character
 	// offset in it. anchor (the backendDOMNodeId of the line's first node)
 	// finds the line again in a rebuilt buffer; url resets it on another
@@ -107,7 +112,7 @@ func NVDAMode(b *Browser) action.NVDAMode {
 // appendSaid adds items to what a has said. While VoiceOver is off (NVDA's
 // mode isn't Focus), only what NVDA says is kept, as NVDA's alone.
 func appendSaid(a *announcer, items ...preset.Announcement) []preset.Announcement {
-	off := modeOf(a.nvda) != action.NVDAModeFocus
+	off := modeOf(a.nvda) != action.NVDAModeFocus || (a.nvda != nil && a.nvda.inReview)
 	for _, it := range items {
 		if off {
 			if !it.NVDA {
@@ -165,7 +170,12 @@ func setNVDAMode(b *Browser, m action.NVDAMode) error {
 			enterPassThrough(nil, st)
 		case action.NVDAModeInputHelp:
 			enterInputHelp(nil, st)
+		case action.NVDAModeReview:
+			enterReview(nil, st)
 		default:
+			if st.inReview {
+				leaveReview(st)
+			}
 			st.mode, st.auto = m, false
 		}
 		return nil
@@ -183,8 +193,14 @@ func setNVDAMode(b *Browser, m action.NVDAMode) error {
 	case m == action.NVDAModeInputHelp:
 		enterInputHelp(a, a.nvda)
 		return nil
+	case m == action.NVDAModeReview:
+		enterReview(a, a.nvda)
+		return nil
 	case modeOf(a.nvda) == action.NVDAModeInputHelp:
 		leaveInputHelp(a, a.nvda) // then on to the mode asked for
+	}
+	if a.nvda.inReview && modeOf(a.nvda) == action.NVDAModeReview {
+		leaveReview(a.nvda) // then on to the mode asked for
 	}
 	switchMode(a, a.nvda, m, false)
 	if m == action.NVDAModeBrowse {
@@ -201,6 +217,16 @@ func setNVDAMode(b *Browser, m action.NVDAMode) error {
 // focus moves on to something else. Manual focus mode is as before.
 func announceFocus(a *announcer, fe *preset.FocusedElement) {
 	st := a.nvda
+	if modeOf(st) == action.NVDAModeReview {
+		// Focus is handled as in the mode NVDA was in (which may switch
+		// between browse and focus mode), then the review cursor follows it.
+		st.mode = st.before
+		announceFocus(a, fe)
+		st.before, st.mode = modeOf(st), action.NVDAModeReview
+		a.last = fe
+		reviewToFocus(a)
+		return
+	}
 	mode := modeOf(st)
 	pass := preset.NVDAShouldPassThrough(fe)
 	same := a.last != nil && fe.NodeID != 0 && fe.NodeID == a.last.NodeID
@@ -500,6 +526,26 @@ func nvdaKey(b *Browser, key string) (bool, *string, error) {
 	if a.cdp == nil {
 		return false, nil, nil
 	}
+	// Review mode: the review commands move the review cursor; any other key
+	// does what it did in the mode NVDA was in, and the review cursor then
+	// follows the browse mode cursor.
+	if mode == action.NVDAModeReview {
+		if cmd := reviewCommandOf(k); cmd != reviewNone {
+			result, err := reviewKey(a, st, cmd)
+			if err != nil {
+				return true, nil, err
+			}
+			return handled(result)
+		}
+		st.mode = st.before
+		defer func() {
+			st.before, st.mode = modeOf(st), action.NVDAModeReview
+			if st.before == action.NVDAModeBrowse {
+				reviewFollow(st)
+			}
+		}()
+		mode = modeOf(st)
+	}
 
 	switch {
 	case k.nvda && k.base == "Space":
@@ -601,6 +647,8 @@ func nvdaTakesKeys(b *Browser) bool {
 	switch NVDAMode(b) {
 	case action.NVDAModeBrowse, action.NVDAModeOneKeyPass, action.NVDAModeInputHelp:
 		return true
+	case action.NVDAModeReview:
+		return b.nvda.before == action.NVDAModeBrowse // its other keys are browse mode's
 	}
 	return false
 }
