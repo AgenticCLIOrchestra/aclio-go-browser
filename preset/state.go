@@ -1,5 +1,7 @@
 package preset
 
+import "github.com/agenticcliorchestra/aclio-go-browser/action"
+
 // State is the page state captured for one turn. Only the parts the preset's
 // Perception asks for are filled; the rest stay zero.
 type State struct {
@@ -14,7 +16,11 @@ type State struct {
 	// Filled by Run / Loop when the preset perceives the focused element;
 	// empty when nothing was said.
 	Announcement []Announcement
-	Tabs         []Tab // in browser order, if Perceive.Tabs
+	// NVDAMode is the simulated NVDA's mode when the snapshot was taken
+	// (session.NVDAMode), filled with Announcement. VoiceOver is off, and
+	// says nothing, while it isn't action.NVDAModeFocus. "" means Focus.
+	NVDAMode action.NVDAMode
+	Tabs     []Tab // in browser order, if Perceive.Tabs
 }
 
 // Announcement is one item a screen reader spoke, and which of the two

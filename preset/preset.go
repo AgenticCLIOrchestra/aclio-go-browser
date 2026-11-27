@@ -42,6 +42,11 @@ type Preset struct {
 	// is worded in, for a preset that perceives the focused element. The
 	// zero value means DefaultLanguage (US English).
 	Language Language
+	// NVDAModes are the modes an nvdaChangeMode action may set, for a preset
+	// that allows it; nil means every mode (action.NVDAModes). When set, it
+	// must include action.NVDAModeFocus, the default, so VoiceOver can always
+	// be turned back on.
+	NVDAModes []action.NVDAMode
 }
 
 // Perception selects which page state is captured each turn.
@@ -69,6 +74,19 @@ func Validate(p Preset) error {
 	if _, err := ResolveLanguage(p.Language); err != nil {
 		errs = append(errs, err)
 	}
+	if Allows(p, action.TypeNVDAChangeMode) && !p.Perceive.Focused {
+		errs = append(errs, fmt.Errorf("%s needs Perceive.Focused: without it there is no screen reader to switch", action.TypeNVDAChangeMode))
+	}
+	if p.NVDAModes != nil {
+		for _, m := range p.NVDAModes {
+			if _, err := action.ResolveNVDAMode(m); err != nil || m == "" {
+				errs = append(errs, fmt.Errorf("NVDAModes: unknown mode %q", m))
+			}
+		}
+		if !slices.Contains(p.NVDAModes, action.NVDAModeFocus) {
+			errs = append(errs, fmt.Errorf("NVDAModes must include %q, the default", action.NVDAModeFocus))
+		}
+	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("preset %q: %w", p.Name, err)
 	}
@@ -76,8 +94,30 @@ func Validate(p Preset) error {
 }
 
 // Schema returns the JSON schema of one action the agent may emit under p.
+// The nvdaChangeMode mode is limited to p.NVDAModes when set.
 func Schema(p Preset) (map[string]any, error) {
-	return action.Schema(p.Actions, p.Targeting)
+	s, err := action.Schema(p.Actions, p.Targeting)
+	if err != nil || p.NVDAModes == nil || !Allows(p, action.TypeNVDAChangeMode) {
+		return s, err
+	}
+	data, _ := s["properties"].(map[string]any)["data"].(map[string]any)
+	if mode, ok := data["properties"].(map[string]any)["mode"].(map[string]any); ok {
+		enum := make([]any, len(p.NVDAModes))
+		for i, m := range p.NVDAModes {
+			enum[i] = string(m)
+		}
+		mode["enum"] = enum
+	}
+	return s, nil
+}
+
+// AllowedNVDAModes are the modes p lets an nvdaChangeMode action set:
+// p.NVDAModes, or every mode when it is nil.
+func AllowedNVDAModes(p Preset) []action.NVDAMode {
+	if p.NVDAModes == nil {
+		return action.NVDAModes()
+	}
+	return slices.Clone(p.NVDAModes)
 }
 
 // Allows reports whether p lets the agent emit action type t.
@@ -94,6 +134,12 @@ func Check(p Preset, a action.Action) error {
 	}
 	if err := action.Validate(a); err != nil {
 		return err
+	}
+	if d, ok := a.Data.(action.NVDAChangeMode); ok {
+		m, _ := action.ResolveNVDAMode(d.Mode)
+		if !slices.Contains(AllowedNVDAModes(p), m) {
+			return fmt.Errorf("%s: mode %q not allowed by preset %q (allowed: %q)", a.Type, m, p.Name, AllowedNVDAModes(p))
+		}
 	}
 	return action.CheckTargeting(a, p.Targeting)
 }

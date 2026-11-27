@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"github.com/agenticcliorchestra/aclio-go-browser/action"
 	"sync"
 
 	"github.com/agenticcliorchestra/aclio-go-browser/engine"
@@ -29,6 +30,9 @@ type announcer struct {
 	cdp  playwright.CDPSession  // on page
 	last *preset.FocusedElement // the element announced last, nil after focus was lost
 	said []preset.Announcement  // announced since the last TakeAnnouncements
+	// voiceOverOff is set while NVDA's mode isn't Focus: what is said from
+	// then on is NVDA's alone (see setNVDAMode).
+	voiceOverOff bool
 
 	signal chan struct{} // the page has queued something
 	done   chan struct{} // closed by Close
@@ -376,7 +380,8 @@ func StartAnnouncing(b *Browser, lang preset.Language) error {
 		a.mu.Unlock()
 		return nil
 	}
-	a := &announcer{lang: lang, signal: make(chan struct{}, 1), done: make(chan struct{})}
+	a := &announcer{lang: lang, signal: make(chan struct{}, 1), done: make(chan struct{}),
+		voiceOverOff: NVDAMode(b) != action.NVDAModeFocus}
 	script := announcerJS
 	if err := b.context.AddInitScript(playwright.Script{Content: &script}); err != nil {
 		return fmt.Errorf("session: installing the announcer: %w", err)
@@ -469,7 +474,7 @@ func processLocked(a *announcer) {
 		switch {
 		case ev.Result.Type == "string": // a live region spoke, which leaves focus as it was
 			if v, ok := ev.Result.Value.(string); ok && len(v) > 1 {
-				a.said = append(a.said, preset.Announcement{Text: v[1:], VoiceOver: v[0] != 'n', NVDA: true})
+				a.said = appendSaid(a, preset.Announcement{Text: v[1:], VoiceOver: v[0] != 'n', NVDA: true})
 			}
 			continue
 		case ev.Result.Type == "undefined" || ev.Result.ObjectID == "":
@@ -482,9 +487,53 @@ func processLocked(a *announcer) {
 		if err != nil || fe == nil {
 			continue
 		}
-		a.said = append(a.said, preset.AnnounceAll(fe, a.last, a.lang)...)
+		a.said = appendSaid(a, preset.AnnounceAll(fe, a.last, a.lang)...)
 		a.last = fe
 	}
+}
+
+// appendSaid adds items to what a has said. While VoiceOver is off, only
+// what NVDA says is kept, as NVDA's alone.
+func appendSaid(a *announcer, items ...preset.Announcement) []preset.Announcement {
+	for _, it := range items {
+		if a.voiceOverOff {
+			if !it.NVDA {
+				continue
+			}
+			it.VoiceOver = false
+		}
+		a.said = append(a.said, it)
+	}
+	return a.said
+}
+
+// setNVDAMode sets b's simulated NVDA mode (the zero value meaning Focus).
+// Any mode but Focus turns VoiceOver off, Focus turns it back on. What was
+// queued before the change is processed first, so it keeps who said it.
+// NVDA itself goes on speaking as in focus mode: what it does differently in
+// each mode isn't simulated.
+func setNVDAMode(b *Browser, m action.NVDAMode) error {
+	m, err := action.ResolveNVDAMode(m)
+	if err != nil {
+		return err
+	}
+	b.nvdaMode = m
+	if a := b.announcer; a != nil {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		processLocked(a)
+		a.voiceOverOff = m != action.NVDAModeFocus
+	}
+	return nil
+}
+
+// NVDAMode is b's simulated NVDA mode: action.NVDAModeFocus until an
+// nvdaChangeMode action sets another. VoiceOver is off while it isn't Focus.
+func NVDAMode(b *Browser) action.NVDAMode {
+	if b == nil || b.nvdaMode == "" {
+		return action.NVDAModeFocus
+	}
+	return b.nvdaMode
 }
 
 // attachAnnouncer points a at page p, the new active tab: its own queue from

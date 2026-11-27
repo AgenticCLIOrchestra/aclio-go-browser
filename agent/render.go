@@ -117,7 +117,27 @@ func screenReaderText(p preset.Preset) string {
 	if !p.Perceive.Focused {
 		return ""
 	}
-	return strings.TrimSpace(screenReaderGuide)
+	text := strings.TrimSpace(screenReaderGuide)
+	if preset.Allows(p, action.TypeNVDAChangeMode) {
+		text += "\n\n" + nvdaModeGuide(p)
+	}
+	return text
+}
+
+// nvdaModeGuide explains the nvdaChangeMode action and the modes p allows,
+// for a preset that allows it.
+func nvdaModeGuide(p preset.Preset) string {
+	allowed := preset.AllowedNVDAModes(p)
+	modes := make([]string, len(allowed))
+	for i, m := range allowed {
+		modes[i] = fmt.Sprintf("%q", m)
+	}
+	return fmt.Sprintf(`The %s action sets NVDA's mode: %s. %q is the default. Any other mode
+turns VoiceOver off until you set %q again, and every turn VoiceOver is off
+you are told so. Only VoiceOver is affected: NVDA goes on speaking as it does
+in focus mode, since what NVDA does differently in each mode isn't simulated,
+so don't draw conclusions about NVDA's other modes from it.`,
+		action.TypeNVDAChangeMode, strings.Join(modes, ", "), action.NVDAModeFocus, action.NVDAModeFocus)
 }
 
 // artifactsGuide explains the artifact actions p allows, or is empty when it

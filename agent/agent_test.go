@@ -106,6 +106,20 @@ func TestScreenReaderGuideFollowsPreset(t *testing.T) {
 	if !strings.Contains(text, "VoiceOver and NVDA") || !strings.Contains(text, "A focused element, when given") {
 		t.Error("blind preset's prompt doesn't explain the screen readers")
 	}
+	if !strings.Contains(text, "The nvdaChangeMode action sets NVDA's mode") || !strings.Contains(text, `"Native selection"`) {
+		t.Error("blind preset's prompt doesn't explain nvdaChangeMode")
+	}
+	if strings.Contains(text, `"Sleep"`) || strings.Contains(text, `"Speech"`) {
+		t.Error("blind preset's prompt offers a mode it doesn't allow")
+	}
+	// A preset that hears the screen readers but can't change NVDA's mode
+	// isn't told about the action.
+	custom := preset.Blind()
+	custom.Name = "listener"
+	custom.Actions = []action.Type{action.TypePress}
+	if text, err := RenderInitial(initial(t, custom)); err != nil || strings.Contains(text, "nvdaChangeMode") {
+		t.Errorf("listener prompt mentions nvdaChangeMode (err %v)", err)
+	}
 }
 
 func TestCustomTemplate(t *testing.T) {

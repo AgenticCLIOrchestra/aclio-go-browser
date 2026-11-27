@@ -382,6 +382,7 @@ func snapshot(b *session.Browser, p preset.Preset, turnsDir string, r aclio.Requ
 	}
 	if p.Perceive.Focused {
 		st.Announcement = session.TakeAnnouncements(b)
+		st.NVDAMode = session.NVDAMode(b)
 	}
 	if p.Perceive.DOM {
 		return st, nil

@@ -92,6 +92,9 @@ func validateData(d Data) error {
 		return ValidateFileName(d.Name)
 	case ReadArtifact:
 		return ValidateFileName(d.Name)
+	case NVDAChangeMode:
+		_, err := ResolveNVDAMode(d.Mode)
+		return err
 	}
 	return nil
 }

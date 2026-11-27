@@ -3,6 +3,7 @@ package preset
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/agenticcliorchestra/aclio-go-browser/action"
 	"slices"
 	"strings"
 )
@@ -28,9 +29,20 @@ func DescribeFocused(s State) string {
 // DescribeAnnouncement gives what the two screen readers said this turn
 // (State.Announcement), VoiceOver's feed then NVDA's, each one spoken item per
 // line, in order. NVDA's part is one line when it said the same, and the
-// whole is one line when neither said anything.
+// whole is one line when neither said anything. While NVDA's mode
+// (State.NVDAMode) isn't Focus, VoiceOver is off: it says so first, then
+// what VoiceOver said before it was turned off, if anything, then NVDA's
+// feed in full.
 func DescribeAnnouncement(s State) string {
 	vo, nvda := VoiceOverSaid(s.Announcement), NVDASaid(s.Announcement)
+	if s.NVDAMode != "" && s.NVDAMode != action.NVDAModeFocus {
+		out := fmt.Sprintf("VoiceOver is off because NVDA's mode is set to %q, not %q. Set it back to %q with %s to hear VoiceOver again.",
+			s.NVDAMode, action.NVDAModeFocus, action.NVDAModeFocus, action.TypeNVDAChangeMode)
+		if len(vo) > 0 {
+			out += "\nBefore it was turned off, " + describeSaid("VoiceOver", vo)
+		}
+		return out + "\n" + describeSaid("NVDA", nvda)
+	}
 	if len(vo) == 0 && len(nvda) == 0 {
 		return "VoiceOver and NVDA said nothing this turn."
 	}
