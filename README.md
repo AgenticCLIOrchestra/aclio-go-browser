@@ -211,7 +211,14 @@ Every turn VoiceOver is off, `DescribeAnnouncement` says so first
 turned off, then NVDA's feed in full. `Browse` is simulated in full (see below), and so is `One-key pass-through`
 (also NVDA+F2, in any mode, as NVDA's `passNextKeyThrough`): NVDA says "Pass next key through", the next key goes
 straight to the page whatever NVDA would do with it (a `type` action's first character, the rest going to NVDA again),
-the action's result says so, and NVDA is then back in the mode it was in. `Speech`, `Sleep`, `Input help`, `Review`
+the action's result says so, and NVDA is then back in the mode it was in. `Input help` is simulated too (also NVDA+1,
+as NVDA's `toggleInputHelp`): NVDA says "input help on. Press insert+1 again to turn it off.", and from then on every
+key (and every character of a `type` action) says what it would do instead of doing it, as NVDA's `_handleInputHelp`
+does: the key's name as NVDA says it ("shift+h", "ctrl+home", "down arrow", "insert+f2"), the character it would type
+when that's different ("H"), and the description of the command bound to it in the mode NVDA was in, word for word
+from NVDA's source ("moves to the next heading", "Activates the current object in the document"; the cursor movement
+keys have none there, so only their name). Nothing happens and no key reaches the page until NVDA+1 again (or
+`nvdaChangeMode`) turns it off ("input help off"), back in the mode NVDA was in. `Speech`, `Sleep`, `Review`
 and `Native selection` only turn VoiceOver off, NVDA going on speaking as in focus mode there, and the prompt tells
 the agent so. `Preset.NVDAModes` limits the modes a preset may set (nil: all
 of them; it must include `Focus`); `preset.Check` refuses the others and the schema doesn't offer them. `Blind()` leaves

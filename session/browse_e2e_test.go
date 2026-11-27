@@ -169,3 +169,48 @@ func TestE2EOneKeyPassThrough(t *testing.T) {
 		t.Errorf("typing zk: page keys %q, NVDA %q, mode %q", keys(), nvda, NVDAMode(b))
 	}
 }
+
+// Input help (NVDA+1) describes keys instead of performing them: nothing
+// reaches the page and the reading cursor doesn't move, until NVDA+1 turns it
+// off, back in browse mode.
+func TestE2EInputHelp(t *testing.T) {
+	e2e(t)
+	b := openAnnouncing(t, liveServer(t), "/doc")
+	keys := func() string {
+		v, _ := b.active.Evaluate(`() => window.keys.join(",")`)
+		s, _ := v.(string)
+		return s
+	}
+	browseStep(t, b, nvdaMode(action.NVDAModeBrowse), press("Control+Home"))
+	nvda, vo, _ := browseStep(t, b, press("NVDA+1"))
+	if !reflect.DeepEqual(nvda, []string{"input help on. Press insert+1 again to turn it off."}) || len(vo) != 0 {
+		t.Errorf("NVDA+1: NVDA %q, VoiceOver %q", nvda, vo)
+	}
+	for _, c := range []struct {
+		key  string
+		want []string
+	}{
+		{"h", []string{"h", "moves to the next heading"}},
+		{"Tab", []string{"tab"}},
+		{"ArrowDown", []string{"down arrow"}},
+	} {
+		if nvda, _, results := browseStep(t, b, press(c.key)); !reflect.DeepEqual(nvda, c.want) || len(results) != 1 || !strings.Contains(results[0], "described this key") {
+			t.Errorf("%s: NVDA %q, results %q, want NVDA %q", c.key, nvda, results, c.want)
+		}
+	}
+	nvda, _, _ = browseStep(t, b, action.Action{Type: action.TypeType, Data: action.Typing{Text: "k"}})
+	if !reflect.DeepEqual(nvda, []string{"k", "moves to the next link"}) {
+		t.Errorf("typing k: NVDA %q", nvda)
+	}
+	if keys() != "" {
+		t.Errorf("keys reached the page: %q", keys())
+	}
+	if nvda, _, _ := browseStep(t, b, press("NVDA+1")); !reflect.DeepEqual(nvda, []string{"insert+1", "input help off"}) || NVDAMode(b) != action.NVDAModeBrowse {
+		t.Errorf("NVDA+1 again: NVDA %q, mode %q", nvda, NVDAMode(b))
+	}
+	// The cursor didn't move while input help was on: H still finds the
+	// second heading next.
+	if nvda, _, _ := browseStep(t, b, press("h")); !reflect.DeepEqual(nvda, []string{"Search", "heading", "level 2"}) {
+		t.Errorf("h after input help: NVDA %q", nvda)
+	}
+}
