@@ -40,16 +40,6 @@ type wording struct {
 	roles     map[string]string // ARIA role -> spoken role; "" or missing: not spoken
 	checked   string            // a ticked checkbox
 	unchecked string            // an unticked one
-	nvda      bool              // NVDA's additions: "not selected" (see stateWords)
-}
-
-// notSelectedRoles are the roles NVDA says "not selected" for when the item
-// is selectable but not selected (NVDA's list item, tree view item, table
-// row, table cell, column / row header and checkbox; an ARIA option is a list
-// item to NVDA). See stateWords.
-var notSelectedRoles = map[string]bool{
-	"option": true, "treeitem": true, "row": true, "gridcell": true, "cell": true,
-	"columnheader": true, "rowheader": true, "checkbox": true,
 }
 
 // roleWords are the spoken roles both English variants share. A role that
@@ -128,40 +118,49 @@ func Announce(cur, prev *FocusedElement, lang Language) []string {
 	return announce(cur, prev, w)
 }
 
-// AnnounceAll is Announce for both modelled screen readers: each spoken item
-// marked with whether VoiceOver, NVDA or both say it. VoiceOver says exactly
-// what Announce returns. NVDA says the same, plus "not selected" for an item
-// that is selectable but not selected (an option, tree item, row, grid cell,
-// … whose aria-selected is false, or an option with no aria-selected), as
-// NVDA does: when focus (or the active descendant) lands on it, and when it
-// is deselected while focused. NVDA says it whether or not the list is
-// multi-selectable; VoiceOver never does.
+// AnnounceAll is Announce for both modelled screen readers: what VoiceOver
+// says (Announce) and what NVDA says (AnnounceNVDA) for the same event,
+// merged into one list, each item marked with who says it. What both say
+// (e.g. the name) is one item for both; a word only one of them uses is its
+// alone, before the next shared item, VoiceOver's first.
 func AnnounceAll(cur, prev *FocusedElement, lang Language) []Announcement {
-	w, ok := wordings[lang]
-	if !ok {
-		w = wordings[DefaultLanguage]
-	}
-	n := w
-	n.nvda = true
-	return mergeFeeds(announce(cur, prev, w), announce(cur, prev, n))
+	return mergeFeeds(Announce(cur, prev, lang), AnnounceNVDA(cur, prev))
 }
 
-// mergeFeeds marks each item of voiceOver and nvda with who says it, in
-// order. NVDA's feed is VoiceOver's with items added, so an item both say is
-// matched in order, and the rest are one reader's alone.
+// mergeFeeds marks each item of voiceOver and nvda with who says it, keeping
+// each feed's order: the items both say are a longest common subsequence of
+// the two, marked for both, and before each, what only VoiceOver then what
+// only NVDA says leading up to it.
 func mergeFeeds(voiceOver, nvda []string) []Announcement {
-	out := []Announcement{}
-	i := 0
-	for _, text := range nvda {
-		if i < len(voiceOver) && voiceOver[i] == text {
-			out = append(out, Announcement{Text: text, VoiceOver: true, NVDA: true})
-			i++
-			continue
-		}
-		out = append(out, Announcement{Text: text, NVDA: true})
+	// lcs[i][j] is the length of the longest common subsequence of
+	// voiceOver[i:] and nvda[j:].
+	lcs := make([][]int, len(voiceOver)+1)
+	for i := range lcs {
+		lcs[i] = make([]int, len(nvda)+1)
 	}
-	for _, text := range voiceOver[i:] {
-		out = append(out, Announcement{Text: text, VoiceOver: true})
+	for i := len(voiceOver) - 1; i >= 0; i-- {
+		for j := len(nvda) - 1; j >= 0; j-- {
+			if voiceOver[i] == nvda[j] {
+				lcs[i][j] = lcs[i+1][j+1] + 1
+			} else {
+				lcs[i][j] = max(lcs[i+1][j], lcs[i][j+1])
+			}
+		}
+	}
+	out := make([]Announcement, 0, len(voiceOver)+len(nvda))
+	i, j := 0, 0
+	for i < len(voiceOver) || j < len(nvda) {
+		switch {
+		case i < len(voiceOver) && j < len(nvda) && voiceOver[i] == nvda[j]:
+			out = append(out, Announcement{Text: voiceOver[i], VoiceOver: true, NVDA: true})
+			i, j = i+1, j+1
+		case i < len(voiceOver) && (j == len(nvda) || lcs[i+1][j] >= lcs[i][j+1]):
+			out = append(out, Announcement{Text: voiceOver[i], VoiceOver: true})
+			i++
+		default:
+			out = append(out, Announcement{Text: nvda[j], NVDA: true})
+			j++
+		}
 	}
 	return out
 }
@@ -313,13 +312,6 @@ func stateWords(e element, w wording) []string {
 	}
 	if st.Selected != nil && *st.Selected && !slices.Contains(out, "selected") {
 		out = append(out, "selected")
-	}
-	// NVDA says "not selected" for a selectable item that isn't selected:
-	// one whose aria-selected is false, and an option with no aria-selected
-	// at all (documented for NVDA with Chrome). VoiceOver says nothing.
-	notSelected := st.Selected != nil && !*st.Selected || st.Selected == nil && e.role == "option"
-	if w.nvda && notSelected && notSelectedRoles[e.role] {
-		out = append(out, "not selected")
 	}
 	if st.Expanded != nil {
 		if *st.Expanded {

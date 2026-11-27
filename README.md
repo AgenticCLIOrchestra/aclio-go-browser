@@ -181,19 +181,23 @@ type Preset struct {
 
 `Blind()` is told only what two screen readers, VoiceOver and NVDA, said since its last turn (`State.Announcement`, rendered by `DescribeAnnouncement`), plus the open tabs: one spoken item per line, in order, VoiceOver's feed first, then NVDA's.
 
-The two feeds are the same except for two things, both NVDA-only:
+The two hear the same events, each in its own wording and order (see below), and NVDA hears two things VoiceOver doesn't:
 
 - **Live region remounts:** in a live region, nodes replaced by nodes with identical text (a re-render that remounts a chat log's messages, say) are spoken by NVDA and not by VoiceOver. NVDA in Chrome reads every node inserted into a live region, while VoiceOver skips a change whose text is identical. So a page that re-announces its whole log on every re-render, a real defect for NVDA users, is heard.
-- **"not selected":** NVDA says it for a selectable item that isn't selected, when focus (or the active descendant) lands on it and when it is deselected in place, as its own state rules do: an option, tree item, row, grid cell or column / row header whose `aria-selected` is false, and an option with no `aria-selected` at all. It does so whether or not the list is multi-selectable. VoiceOver says nothing for an unselected item; both say `selected` for a selected one. `preset.AnnounceAll` gives a focus announcement for both readers; `preset.Announce` stays VoiceOver's. Each `preset.Announcement` in `State.Announcement` is one spoken item with its `Text` and whether `VoiceOver` and `NVDA` spoke it; `preset.VoiceOverSaid` and `preset.NVDASaid` give each feed. Both use the VoiceOver-modelled wording below. For example:
+- **"not selected":** NVDA says it for a selectable item that isn't selected, when focus (or the active descendant) lands on it and when it is deselected in place, as its own state rules do: an option, tree item, row, grid cell or column / row header whose `aria-selected` is false, and an option with no `aria-selected` at all. It does so whether or not the list is multi-selectable. VoiceOver says nothing for an unselected item. For a selected one, VoiceOver says `selected` on arrival; NVDA says it only when the item becomes selected, not on arrival, since its state rules leave out `selected` for a list, tree or menu item focus lands on.
+
+`preset.AnnounceAll` gives a focus announcement for both readers; `preset.Announce` stays VoiceOver's and `preset.AnnounceNVDA` is NVDA's. Each `preset.Announcement` in `State.Announcement` is one spoken item with its `Text` and whether `VoiceOver` and `NVDA` spoke it: what both say (a name, a live region's text) is one item marked for both, and a word only one of them uses is marked for that one. `preset.VoiceOverSaid` and `preset.NVDASaid` give each feed. For example, tabbing to a checkbox after a chat log re-rendered:
 
 ```
 VoiceOver said, in order:
-- Ask
-- button
+- Agree
+- unchecked
+- checkbox
 NVDA said, in order:
 - Q A
-- Ask
-- button
+- Agree
+- check box
+- not checked
 ```
 
 When NVDA said the same, its part is one line, `NVDA said the same.`
@@ -221,7 +225,16 @@ main · Prefs · form · Sort by · group · Ascending · selected · radio butt
 Descending · selected · radio button · 2 of 2
 ```
 
-The wording is modelled on VoiceOver ("edit text", "pop-up button", "dimmed", "heading level 2"). `Preset.Language` picks US English (`preset.LanguageEnUS`, the default: "checkbox", "checked") or British English (`preset.LanguageEnGB`: "tick box", "ticked"); `preset.Validate` refuses any other. The position comes from `aria-posinset` / `aria-setsize` when the page sets them, otherwise it is counted from the DOM (radios with the same name in the same form, or visible siblings with the same role), since Chromium's accessibility tree doesn't report it.
+VoiceOver's wording is modelled on VoiceOver ("edit text", "pop-up button", "dimmed", "heading level 2"). `Preset.Language` picks US English (`preset.LanguageEnUS`, the default: "checkbox", "checked") or British English (`preset.LanguageEnGB`: "tick box", "ticked"); `preset.Validate` refuses any other. The position comes from `aria-posinset` / `aria-setsize` when the page sets them, otherwise it is counted from the DOM (radios with the same name in the same form, or visible siblings with the same role), since Chromium's accessibility tree doesn't report it.
+
+NVDA's comes from `preset.AnnounceNVDA(cur, prev)`, the same rules in NVDA's wording and order, taken from NVDA's own source and from how Chrome exposes each role to it on Windows:
+
+- **Order:** name, role, value, states, description, keyboard shortcut (`aria-keyshortcuts`), position ("2 of 5"), heading level ("level 2"). A tree item's level is said first, when it changes.
+- **Roles:** "edit" for a text field, "check box", "radio button", "combo box" (a native `<select>` too), "toggle button" for a button with `aria-pressed`, "menu button" for one with a popup, "tool bar", "tab control", "tree view", "graphic", and landmarks as "main landmark", "navigation landmark", "content info landmark", …. A named list item, option, menu item or tree item has no role spoken, and context it passes through says nothing for unnamed groupings, list items, rows and cells.
+- **States:** "checked" / "not checked" / "half checked" (checkboxes, radios, checkable menu items), "pressed" / "not pressed", "on" / "off" for a switch, "not selected" for an unselected option, tree item or row (and nothing for a selected one on focus), "selected" for a tab, "expanded" / "collapsed", "subMenu" / "opens dialog" / "opens list" / "opens grid" / "opens tree" for a popup, "required", "invalid entry", "read only", "has auto complete", "unavailable" for a disabled one.
+- **Changes:** the new value, then the states gained, negative ones included (e.g. "not checked" after unticking).
+
+NVDA has one English locale, so `Preset.Language` changes only VoiceOver's wording. It doesn't yet say "multi line", "protected" (a password field), table coordinates or list item counts, which the snapshot doesn't capture.
 
 The raw fields the announcement is built from stay in `State.Focused` (see [session](#session)), for you and for custom presets: `DescribeFocused` renders them as JSON.
 

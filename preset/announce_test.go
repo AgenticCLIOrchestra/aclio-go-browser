@@ -123,8 +123,10 @@ func TestAnnounceActiveDescendant(t *testing.T) {
 }
 
 // NVDA says "not selected" for a selectable item that isn't selected, on
-// arrival and when it is deselected in place; VoiceOver never does. Both say
-// "selected" alike, and NVDA says nothing extra for items that aren't
+// arrival and when it is deselected in place; VoiceOver never does. For a
+// selected one, VoiceOver says "selected" on arrival, NVDA only when it
+// becomes selected (its state rules drop SELECTED on focus for a selectable
+// list, tree or menu item). NVDA says no "not selected" for items that aren't
 // selectable or whose role it doesn't report it for.
 func TestAnnounceAllNotSelected(t *testing.T) {
 	both := func(text string) Announcement { return Announcement{Text: text, VoiceOver: true, NVDA: true} }
@@ -140,7 +142,8 @@ func TestAnnounceAllNotSelected(t *testing.T) {
 	if got, want := AnnounceAll(lb(banana), lb(apple), ""), []Announcement{both("Banana"), nvda("not selected"), both("2 of 3")}; !reflect.DeepEqual(got, want) {
 		t.Errorf("arrive on an unselected option = %v, want %v", got, want)
 	}
-	if got, want := AnnounceAll(lb(apple), lb(banana), ""), []Announcement{both("Apple"), both("selected"), both("1 of 3")}; !reflect.DeepEqual(got, want) {
+	vo := func(text string) Announcement { return Announcement{Text: text, VoiceOver: true} }
+	if got, want := AnnounceAll(lb(apple), lb(banana), ""), []Announcement{both("Apple"), vo("selected"), both("1 of 3")}; !reflect.DeepEqual(got, want) {
 		t.Errorf("arrive on a selected option = %v, want %v", got, want)
 	}
 	deselected := opt(11, "Apple", ptr(false))
@@ -167,13 +170,45 @@ func TestAnnounceAllNotSelected(t *testing.T) {
 		{Role: ptr("tab"), Name: ptr("Home"), NodeID: 20, AXState: AXState{Selected: ptr(false)}},
 		{Role: ptr("radio"), Name: ptr("Asc"), NodeID: 21, AXState: AXState{Checked: ptr("false")}},
 	} {
-		if got := AnnounceAll(fe, nil, ""); !reflect.DeepEqual(NVDASaid(got), VoiceOverSaid(got)) {
-			t.Errorf("%s: NVDA %q, VoiceOver %q, want the same", deref(fe.Name), NVDASaid(got), VoiceOverSaid(got))
+		if got := NVDASaid(AnnounceAll(fe, nil, "")); slices.Contains(got, "not selected") {
+			t.Errorf("%s: NVDA %q, want no not selected", deref(fe.Name), got)
 		}
 	}
 	// Announce stays VoiceOver's feed.
 	if got := Announce(lb(banana), lb(apple), ""); slices.Contains(got, "not selected") {
 		t.Errorf("Announce = %q, want no not selected", got)
+	}
+}
+
+// mergeFeeds keeps what both screen readers say as one item, and puts what
+// only one says in its place, VoiceOver's before NVDA's; each feed comes back
+// out unchanged.
+func TestMergeFeeds(t *testing.T) {
+	both := func(s string) Announcement { return Announcement{Text: s, VoiceOver: true, NVDA: true} }
+	vo := func(s string) Announcement { return Announcement{Text: s, VoiceOver: true} }
+	nvda := func(s string) Announcement { return Announcement{Text: s, NVDA: true} }
+	for _, c := range []struct {
+		name      string
+		voice, nv []string
+		want      []Announcement
+	}{
+		{"same", []string{"Save", "button"}, []string{"Save", "button"}, []Announcement{both("Save"), both("button")}},
+		{"empty", []string{}, []string{}, []Announcement{}},
+		{"reordered", []string{"Agree", "unchecked", "checkbox"}, []string{"Agree", "check box", "not checked"},
+			[]Announcement{both("Agree"), vo("unchecked"), vo("checkbox"), nvda("check box"), nvda("not checked")}},
+		{"shared role moves", []string{"Ascending", "selected", "radio button", "1 of 2"}, []string{"Ascending", "radio button", "checked", "1 of 2"},
+			[]Announcement{both("Ascending"), vo("selected"), both("radio button"), nvda("checked"), both("1 of 2")}},
+		{"only one", []string{"main"}, []string{"main landmark"}, []Announcement{vo("main"), nvda("main landmark")}},
+		{"NVDA adds", []string{"Banana", "2 of 3"}, []string{"Banana", "not selected", "2 of 3"},
+			[]Announcement{both("Banana"), nvda("not selected"), both("2 of 3")}},
+	} {
+		got := mergeFeeds(c.voice, c.nv)
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: got %+v\nwant %+v", c.name, got, c.want)
+		}
+		if v, n := VoiceOverSaid(got), NVDASaid(got); !reflect.DeepEqual(v, c.voice) || !reflect.DeepEqual(n, c.nv) {
+			t.Errorf("%s: feeds %q / %q, want %q / %q", c.name, v, n, c.voice, c.nv)
+		}
 	}
 }
 
