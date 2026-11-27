@@ -181,7 +181,10 @@ type Preset struct {
 
 `Blind()` is told only what two screen readers, VoiceOver and NVDA, said since its last turn (`State.Announcement`, rendered by `DescribeAnnouncement`), plus the open tabs: one spoken item per line, in order, VoiceOver's feed first, then NVDA's.
 
-The two feeds are the same except for one thing: in a live region, nodes replaced by nodes with identical text (a re-render that remounts a chat log's messages, say) are spoken by NVDA and not by VoiceOver. NVDA in Chrome reads every node inserted into a live region, while VoiceOver skips a change whose text is identical. So a page that re-announces its whole log on every re-render, a real defect for NVDA users, is heard. Each `preset.Announcement` in `State.Announcement` is one spoken item with its `Text` and whether `VoiceOver` and `NVDA` spoke it; `preset.VoiceOverSaid` and `preset.NVDASaid` give each feed. Both use the VoiceOver-modelled wording below. For example:
+The two feeds are the same except for two things, both NVDA-only:
+
+- **Live region remounts:** in a live region, nodes replaced by nodes with identical text (a re-render that remounts a chat log's messages, say) are spoken by NVDA and not by VoiceOver. NVDA in Chrome reads every node inserted into a live region, while VoiceOver skips a change whose text is identical. So a page that re-announces its whole log on every re-render, a real defect for NVDA users, is heard.
+- **"not selected":** NVDA says it for a selectable item that isn't selected, when focus (or the active descendant) lands on it and when it is deselected in place, as its own state rules do: an option, tree item, row, grid cell or column / row header whose `aria-selected` is false, and an option with no `aria-selected` at all. It does so whether or not the list is multi-selectable. VoiceOver says nothing for an unselected item; both say `selected` for a selected one. `preset.AnnounceAll` gives a focus announcement for both readers; `preset.Announce` stays VoiceOver's. Each `preset.Announcement` in `State.Announcement` is one spoken item with its `Text` and whether `VoiceOver` and `NVDA` spoke it; `preset.VoiceOverSaid` and `preset.NVDASaid` give each feed. Both use the VoiceOver-modelled wording below. For example:
 
 ```
 VoiceOver said, in order:

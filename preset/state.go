@@ -21,7 +21,8 @@ type State struct {
 // modelled screen readers spoke it. Most items are spoken by both; NVDA alone
 // speaks what a live region re-inserts with identical text (it reads every
 // node inserted into a live region, while VoiceOver skips a change whose
-// text is identical). The wording is VoiceOver's for both.
+// text is identical) and "not selected" for a selectable item that isn't
+// selected (see AnnounceAll). The wording is VoiceOver's for both.
 type Announcement struct {
 	Text      string `json:"text"`
 	VoiceOver bool   `json:"voiceOver"`

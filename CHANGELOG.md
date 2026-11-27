@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0] - 2026-11-27
+
+### Added
+- The NVDA feed now says "not selected" for a selectable item that isn't selected, as NVDA's own state rules do: an option, tree item, row, grid cell or column / row header whose `aria-selected` is false, and an option with no `aria-selected` at all (as documented for NVDA). It is said when focus (or the active descendant) lands on the item, and when the item is deselected while focused (e.g. Space in a multi-select list), whether or not the list is multi-selectable. The VoiceOver feed is unchanged: VoiceOver says nothing for an unselected item, so deselecting an option used to be silent in both feeds, which made correct `aria-selected="false"` markup look unannounced
+- `preset.AnnounceAll(cur, prev, language)`: `Announce` for both screen readers, as `[]Announcement` marked with who says each item. `Announce` still returns VoiceOver's feed
+
+### Changed
+- `DefaultInitialPrompt` tells the agent about NVDA's "not selected", and that VoiceOver's silence for an unselected item isn't a defect
+
 ## [0.21.0] - 2026-11-24
 
 ### Added
@@ -207,6 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.22.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.18.1...v0.19.0

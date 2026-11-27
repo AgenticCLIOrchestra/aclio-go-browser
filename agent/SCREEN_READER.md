@@ -11,10 +11,12 @@ says nothing. Move focus with the keyboard (Tab, Shift+Tab, arrow keys) to
 hear more.
 
 Screen-reader output comes from two screen readers, VoiceOver and NVDA. They
-say the same thing, except that NVDA also reads content a live region re-inserts with
-the same text as before ("NVDA said the same." when there was none). Content
-repeated in the NVDA feed when nothing new happened is what NVDA users hear,
-so it is a real finding.
+say the same thing, except that NVDA also reads content a live region
+re-inserts with the same text as before, and says "not selected" for an item
+in a list, tree or grid that isn't selected ("NVDA said the same." when there
+was neither). Content repeated in the NVDA feed when nothing new happened is
+what NVDA users hear, so it is a real finding. VoiceOver says nothing for an
+unselected item, so its silence there is not a defect.
 
 A focused element, when given, is a screen-reader view of where keyboard focus is: `role`
 and `name` are what a screen reader announces it as (`name` is "" when it has
