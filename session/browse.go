@@ -25,6 +25,9 @@ type nvdaState struct {
 	// when focus moves on to something else, or on Escape. Focus mode set by
 	// hand (nvdaChangeMode, NVDA+Space, the default) stays until changed.
 	auto bool
+	// before is the mode to go back to once one-key pass-through has let
+	// its key through.
+	before action.NVDAMode
 	// The reading cursor: a line of the virtual buffer and a character
 	// offset in it. anchor (the backendDOMNodeId of the line's first node)
 	// finds the line again in a rebuilt buffer; url resets it on another
@@ -58,6 +61,31 @@ func modeOf(st *nvdaState) action.NVDAMode {
 		return action.NVDAModeFocus
 	}
 	return st.mode
+}
+
+// enterPassThrough starts one-key pass-through (NVDA+F2, or nvdaChangeMode):
+// the next key goes straight to the page, whatever NVDA would do with it,
+// and NVDA then goes back to the mode it was in. NVDA says "Pass next key
+// through" (globalCommands.script_passNextKeyThrough). a is nil when b
+// doesn't announce.
+func enterPassThrough(a *announcer, st *nvdaState) {
+	if modeOf(st) != action.NVDAModeOneKeyPass {
+		st.before = modeOf(st)
+	}
+	st.mode = action.NVDAModeOneKeyPass
+	if a != nil {
+		sayNVDA(a, "Pass next key through")
+	}
+}
+
+// passThroughDone ends one-key pass-through after its key, back in the mode
+// NVDA was in before (with whether NVDA had entered it by itself).
+func passThroughDone(st *nvdaState) {
+	st.mode = st.before
+	if st.mode == action.NVDAModeOneKeyPass {
+		st.mode = action.NVDAModeFocus
+	}
+	st.before = ""
 }
 
 func resetCursor(st *nvdaState) {
@@ -121,7 +149,8 @@ func switchMode(a *announcer, st *nvdaState, m action.NVDAMode, auto bool) {
 // Focus), as nvdaChangeMode does. Any mode but Focus turns VoiceOver off,
 // Focus turns it back on. What was queued before the change is processed
 // first, so it keeps who said it. Entering browse mode puts the reading
-// cursor where focus is.
+// cursor where focus is. One-key pass-through lasts one key, then NVDA is
+// back in the mode it was in.
 func setNVDAMode(b *Browser, m action.NVDAMode) error {
 	m, err := action.ResolveNVDAMode(m)
 	if err != nil {
@@ -130,6 +159,10 @@ func setNVDAMode(b *Browser, m action.NVDAMode) error {
 	a := b.announcer
 	if a == nil {
 		st := nvdaOf(b)
+		if m == action.NVDAModeOneKeyPass {
+			enterPassThrough(nil, st)
+			return nil
+		}
 		st.mode, st.auto = m, false
 		return nil
 	}
@@ -139,6 +172,10 @@ func setNVDAMode(b *Browser, m action.NVDAMode) error {
 		a.nvda = nvdaOf(b)
 	}
 	processLocked(a)
+	if m == action.NVDAModeOneKeyPass {
+		enterPassThrough(a, a.nvda)
+		return nil
+	}
 	switchMode(a, a.nvda, m, false)
 	if m == action.NVDAModeBrowse {
 		cursorToFocus(a)
@@ -415,18 +452,36 @@ func segAt(buf *vbuf, l, off int) (vbufSeg, bool) {
 func nvdaKey(b *Browser, key string) (bool, *string, error) {
 	a := b.announcer
 	if a == nil {
+		if st := b.nvda; modeOf(st) == action.NVDAModeOneKeyPass {
+			passThroughDone(st)
+		}
 		return false, nil, nil
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	processLocked(a)
-	if a.cdp == nil {
-		return false, nil, nil
+	if a.nvda == nil {
+		a.nvda = nvdaOf(b)
 	}
+	processLocked(a)
 	st := a.nvda
 	k := parseKey(key)
 	mode := modeOf(st)
 	handled := func(msg string) (bool, *string, error) { return true, &msg, nil }
+
+	// One-key pass-through: this key goes straight to the page (false: not
+	// handled), then NVDA is back in the mode it was in.
+	if mode == action.NVDAModeOneKeyPass {
+		passThroughDone(st)
+		msg := fmt.Sprintf("NVDA passed this key straight through to the page; it is back in %q mode.", modeOf(st))
+		return false, &msg, nil
+	}
+	if k.nvda && k.base == "F2" {
+		enterPassThrough(a, st)
+		return handled("NVDA will pass the next key straight through to the page, whatever its mode.")
+	}
+	if a.cdp == nil {
+		return false, nil, nil
+	}
 
 	switch {
 	case k.nvda && k.base == "Space":
@@ -520,12 +575,14 @@ func nvdaKey(b *Browser, key string) (bool, *string, error) {
 
 // typeThroughNVDA types text key by key in browse mode: each character goes
 // to NVDA first, so letters are quick navigation keys (as with real NVDA),
-// and only what NVDA doesn't keep reaches the page. When NVDA switches to
-// focus mode along the way, the rest is typed as usual.
+// and only what NVDA doesn't keep reaches the page. In one-key pass-through,
+// the first character reaches the page and NVDA goes back to its mode for
+// the rest. When NVDA is in focus mode (or switches to it along the way),
+// the rest is typed as usual.
 func typeThroughNVDA(b *Browser, text string) (*string, error) {
 	kept := 0
 	for i, r := range text {
-		if NVDAMode(b) != action.NVDAModeBrowse {
+		if m := NVDAMode(b); m != action.NVDAModeBrowse && m != action.NVDAModeOneKeyPass {
 			return keptResult(kept), b.active.Keyboard().Type(text[i:])
 		}
 		ch := string(r)

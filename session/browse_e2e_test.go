@@ -135,3 +135,37 @@ func TestE2EBrowseModeSwitching(t *testing.T) {
 		t.Errorf("say all: NVDA %q, results %q", nvda, results)
 	}
 }
+
+// One-key pass-through (NVDA+F2, or nvdaChangeMode) lets exactly one key
+// reach the page, then NVDA is back in its mode: in browse mode, the next
+// letter reaches the page instead of jumping, and the one after it jumps.
+func TestE2EOneKeyPassThrough(t *testing.T) {
+	e2e(t)
+	b := openAnnouncing(t, liveServer(t), "/doc")
+	keys := func() string {
+		v, _ := b.active.Evaluate(`() => window.keys.join(",")`)
+		s, _ := v.(string)
+		return s
+	}
+	browseStep(t, b, nvdaMode(action.NVDAModeBrowse), press("Control+Home"))
+	nvda, vo, _ := browseStep(t, b, press("NVDA+F2"))
+	if !reflect.DeepEqual(nvda, []string{"Pass next key through"}) || len(vo) != 0 || NVDAMode(b) != action.NVDAModeOneKeyPass {
+		t.Errorf("NVDA+F2: NVDA %q, VoiceOver %q, mode %q", nvda, vo, NVDAMode(b))
+	}
+	nvda, _, results := browseStep(t, b, press("h"))
+	if keys() != "h" || len(nvda) != 0 || NVDAMode(b) != action.NVDAModeBrowse || len(results) != 1 || !strings.Contains(results[0], "passed this key straight through") {
+		t.Errorf("the passed h: page keys %q, NVDA %q, mode %q, results %q", keys(), nvda, NVDAMode(b), results)
+	}
+	if nvda, _, _ := browseStep(t, b, press("h")); keys() != "h" || !reflect.DeepEqual(nvda, []string{"Search", "heading", "level 2"}) {
+		t.Errorf("the next h: page keys %q, NVDA %q", keys(), nvda)
+	}
+	// Set with nvdaChangeMode, and through type: the first character
+	// reaches the page, the rest is NVDA's again.
+	if nvda, _, _ := browseStep(t, b, nvdaMode(action.NVDAModeOneKeyPass)); !reflect.DeepEqual(nvda, []string{"Pass next key through"}) {
+		t.Errorf("nvdaChangeMode: NVDA %q", nvda)
+	}
+	nvda, _, _ = browseStep(t, b, action.Action{Type: action.TypeType, Data: action.Typing{Text: "zk"}})
+	if keys() != "h,z" || !reflect.DeepEqual(nvda, []string{"no next link"}) || NVDAMode(b) != action.NVDAModeBrowse {
+		t.Errorf("typing zk: page keys %q, NVDA %q, mode %q", keys(), nvda, NVDAMode(b))
+	}
+}

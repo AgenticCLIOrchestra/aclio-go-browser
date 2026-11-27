@@ -90,7 +90,8 @@ lb.addEventListener('keydown', (e) => {
 <label for="q">Query</label> <input id="q">
 <button id="go" onclick="document.getElementById('out').textContent = 'Searched ' + document.getElementById('q').value">Go</button>
 <p id="out"></p>
-</main>`,
+</main>
+<script>window.keys = []; document.addEventListener('keydown', (e) => window.keys.push(e.key), true);</script>`,
 		"/frame": `<!doctype html><title>Frame</title><button id="go">Go</button>
 <iframe srcdoc="<div role=status id=s></div>"></iframe>`,
 		"/alert": `<!doctype html><title>Alert</title><button id="go" onclick="
