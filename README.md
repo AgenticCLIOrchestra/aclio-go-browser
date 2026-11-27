@@ -218,7 +218,18 @@ does: the key's name as NVDA says it ("shift+h", "ctrl+home", "down arrow", "ins
 when that's different ("H"), and the description of the command bound to it in the mode NVDA was in, word for word
 from NVDA's source ("moves to the next heading", "Activates the current object in the document"; the cursor movement
 keys have none there, so only their name). Nothing happens and no key reaches the page until NVDA+1 again (or
-`nvdaChangeMode`) turns it off ("input help off"), back in the mode NVDA was in. `Speech`, `Sleep`, `Review`
+`nvdaChangeMode`) turns it off ("input help off"), back in the mode NVDA was in. `Review` turns on NVDA's review cursor
+in document review (NVDA says "Document review"): it reads the virtual buffer without moving focus, the page or the
+browse mode cursor, with NVDA's review commands on its desktop layout (globalCommands' `script_review_*`): Numpad7 /
+Numpad8 / Numpad9 the previous / current / next line, Numpad4 / 5 / 6 the word, Numpad1 / 2 / 3 the character,
+Shift+Numpad7 / Shift+Numpad9 the top / bottom line, Shift+Numpad1 / Shift+Numpad3 the start / end of the line,
+NumpadAdd say all, NVDA+PageUp / NVDA+PageDown "Movement by page not supported" (a virtual buffer has no page unit).
+At the edges NVDA says "Top" / "Bottom" (lines, words) or "Left" / "Right" (characters) and reads what's there again;
+characters stay on the line, words cross lines. Other keys do what they did in the mode NVDA was in (browse mode's
+quick navigation, say, or keys reaching the page), and the review cursor follows focus and the browse mode cursor, as
+NVDA's `followFocus` / `followCaret` (on by default) do. Setting another mode leaves it. Real NVDA has the review keys in
+every mode; here they are review mode's, so the numpad still reaches the page elsewhere, and object and screen review,
+spelling on a double press, and the laptop layout aren't simulated. `Speech`, `Sleep`
 and `Native selection` only turn VoiceOver off, NVDA going on speaking as in focus mode there, and the prompt tells
 the agent so. `Preset.NVDAModes` limits the modes a preset may set (nil: all
 of them; it must include `Focus`); `preset.Check` refuses the others and the schema doesn't offer them. `Blind()` leaves
