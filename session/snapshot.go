@@ -249,10 +249,11 @@ const activeDescendantJS = `function () {
 
 // cdpAXNode is the part of a CDP Accessibility.AXNode we read.
 type cdpAXNode struct {
-	NodeID         string `json:"nodeId"`
-	BackendNodeID  int    `json:"backendDOMNodeId"`
-	ParentID       string `json:"parentId"`
-	Ignored        bool   `json:"ignored"`
+	NodeID         string   `json:"nodeId"`
+	BackendNodeID  int      `json:"backendDOMNodeId"`
+	ParentID       string   `json:"parentId"`
+	ChildIDs       []string `json:"childIds"`
+	Ignored        bool     `json:"ignored"`
 	IgnoredReasons []struct {
 		Name string `json:"name"`
 	} `json:"ignoredReasons"`

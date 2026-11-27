@@ -81,6 +81,16 @@ lb.addEventListener('keydown', (e) => {
   e.preventDefault();
 });
 </script>`,
+		"/doc": `<!doctype html><title>Doc</title>
+<main>
+<h1>Welcome</h1>
+<p>Read the <a href="#terms">terms</a> first.</p>
+<ul><li>Apples</li><li>Pears</li></ul>
+<h2>Search</h2>
+<label for="q">Query</label> <input id="q">
+<button id="go" onclick="document.getElementById('out').textContent = 'Searched ' + document.getElementById('q').value">Go</button>
+<p id="out"></p>
+</main>`,
 		"/frame": `<!doctype html><title>Frame</title><button id="go">Go</button>
 <iframe srcdoc="<div role=status id=s></div>"></iframe>`,
 		"/alert": `<!doctype html><title>Alert</title><button id="go" onclick="
@@ -600,15 +610,17 @@ func TestE2ENVDAModeTurnsVoiceOverOff(t *testing.T) {
 	mode := func(m action.NVDAMode) action.Action {
 		return action.Action{Type: action.TypeNVDAChangeMode, Data: action.NVDAChangeMode{Mode: m}}
 	}
-	do(t, b, press("Tab"), mode(action.NVDAModeBrowse), press("Tab"))
+	// Review: a mode with no switching rules (Browse switches to focus mode
+	// by itself in a text field, see TestE2EBrowseModeSwitching).
+	do(t, b, press("Tab"), mode(action.NVDAModeReview), press("Tab"))
 	vo, nvda := heardBoth(t, b, "", 500*time.Millisecond)
 	if want := []string{"main", "Prefs", "form", "First", "edit text"}; !reflect.DeepEqual(vo, want) {
-		t.Errorf("VoiceOver said %q, want only what it said before Browse %q", vo, want)
+		t.Errorf("VoiceOver said %q, want only what it said before Review %q", vo, want)
 	}
 	if want := []string{"main landmark", "Prefs", "form", "First", "edit", "Second", "edit"}; !reflect.DeepEqual(nvda, want) {
 		t.Errorf("NVDA said %q, want %q", nvda, want)
 	}
-	if got := NVDAMode(b); got != action.NVDAModeBrowse {
+	if got := NVDAMode(b); got != action.NVDAModeReview {
 		t.Errorf("mode = %q", got)
 	}
 	do(t, b, mode(action.NVDAModeFocus), press("Tab"))

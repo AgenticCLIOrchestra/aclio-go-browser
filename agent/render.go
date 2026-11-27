@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/agenticcliorchestra/aclio-go-browser/action"
@@ -132,12 +133,41 @@ func nvdaModeGuide(p preset.Preset) string {
 	for i, m := range allowed {
 		modes[i] = fmt.Sprintf("%q", m)
 	}
-	return fmt.Sprintf(`The %s action sets NVDA's mode: %s. %q is the default. Any other mode
-turns VoiceOver off until you set %q again, and every turn VoiceOver is off
-you are told so. Only VoiceOver is affected: NVDA goes on speaking as it does
-in focus mode, since what NVDA does differently in each mode isn't simulated,
-so don't draw conclusions about NVDA's other modes from it.`,
+	text := fmt.Sprintf(`The %s action sets NVDA's mode: %s. %q is the default. Any other mode
+turns VoiceOver off until NVDA is in %q again, and every turn VoiceOver is off
+you are told so.`,
 		action.TypeNVDAChangeMode, strings.Join(modes, ", "), action.NVDAModeFocus, action.NVDAModeFocus)
+	if slices.Contains(allowed, action.NVDAModeBrowse) {
+		text += `
+
+In "Browse" mode NVDA reads the page as NVDA users do, with its own reading
+cursor, and keeps these keys from the page (use the press action):
+ArrowDown / ArrowUp read the next / previous line, ArrowRight / ArrowLeft a
+character, Control+ArrowRight / Control+ArrowLeft a word, PageDown / PageUp
+move 25 lines, Control+Home / Control+End go to the top / bottom, and
+NVDA+ArrowDown reads from the cursor to the end (say all). Single letters jump
+to the next element of a kind (with Shift, the previous one): H heading, 1-6
+heading of that level, K link, F form field, E edit field, B button, X check
+box, R radio button, C combo box, L list, I list item, G graphic, D landmark,
+T table, S separator, Q block quote; "no next heading" means there is none.
+Enter or Space activates what the cursor is on. Any other character key is
+kept from the page, so typing letters in browse mode jumps around instead of
+typing: move focus into the field (Tab, or Enter on it) first. Tab, Escape and
+other keys still reach the page. Like real NVDA, it switches to "Focus" mode by
+itself when focus lands in a text field or a widget it can't operate in browse
+mode (a combo box, list box, tree, menu, radio button, tab, …), and back to
+"Browse" when focus moves on to something else or you press Escape;
+NVDA+Space switches by hand. Switching plays a sound, shown as "(sound: focus
+mode)" / "(sound: browse mode)".`
+	}
+	if len(allowed) > 2 {
+		text += `
+
+The other modes only turn VoiceOver off: what NVDA does differently in them
+isn't simulated, so NVDA goes on speaking as in focus mode there, and you
+can't draw conclusions about those modes from it.`
+	}
+	return text
 }
 
 // artifactsGuide explains the artifact actions p allows, or is empty when it

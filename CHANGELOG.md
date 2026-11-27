@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.0] - 2026-11-27
+
+### Added
+- NVDA's browse mode. In the `Browse` mode, the simulated NVDA reads the page as NVDA users do, following NVDA's own source (`browseMode`, `cursorManager`, its speech and presentation rules) with its defaults. Its virtual buffer is the active tab's main frame as lines, built from Chromium's accessibility tree and each element's CSS `display`, wrapping at 100 characters. With the `press` action:
+  - ArrowDown / ArrowUp read the next / previous line, ArrowRight / ArrowLeft a character, Control+ArrowRight / Control+ArrowLeft a word, Home / End the line's ends, PageDown / PageUp move 25 lines, Control+Home / Control+End go to the top / bottom, and NVDA+ArrowDown reads to the end (say all, up to 200 lines per key press)
+  - quick navigation: H, 1–6, K, F, E, B, X, R, C, L, I, G, D, T, S and Q jump to the next heading, heading of a level, link, form field, edit field, button, check box, radio button, combo box, list, list item, graphic, landmark, table, separator or block quote (with Shift, the previous one), or say "no next heading", …
+  - Enter and Space activate what the cursor is on (a link or button is clicked, a field is focused)
+- What NVDA says in browse mode: line reading puts a field's role and states before its content ("link", "terms"), quick navigation and focus changes put the content first ("terms", "link"). Containers are announced on entry ("list", "with 2 items", "main landmark", tables "with 3 rows and 4 columns") and, except landmarks, on exit ("out of list"); list bullets are read as "bullet"
+- Browse mode keeps its keys from the page: those above, and any other character key, as NVDA traps keys with no command. The action's result says so. `type` in browse mode sends each character to NVDA, so letters jump around instead of typing, and the result says how many characters NVDA took. Tab, Escape, function keys and Control/Alt shortcuts still reach the page
+- Automatic switching, as NVDA's `shouldPassThrough` does it: from browse mode, NVDA switches to focus mode by itself when focus lands on a text field or a widget it can't operate in browse mode (combo box, list box, option, slider, tab list, menu, menu item, tree, tree item, spin button, grid cell, radio button, tab, or anything in a toolbar), with VoiceOver back on. It switches back to browse mode when focus moves on to something else, or on Escape. NVDA+Space (`Insert+`, `CapsLock+` too) switches by hand. Focus mode set by hand stays until changed. Each switch between the two plays NVDA's sound, recorded in the NVDA feed as `(sound: focus mode)` / `(sound: browse mode)`
+- `preset.BrowseField`, `preset.BrowseCategory`, `preset.BrowseReason`, `preset.NVDABrowseCategory`, `preset.NVDABrowseEnter`, `preset.NVDABrowseExit` and `preset.NVDAShouldPassThrough`: NVDA's browse mode wording and switching rules
+- `DefaultInitialPrompt` explains browse mode's keys and switching to a preset that allows the `Browse` mode
+
+### Changed
+- Entering browse mode puts NVDA's reading cursor where focus is; switching tabs or loading another document starts it at the top
+
 ## [0.24.0] - 2026-11-27
 
 ### Added
@@ -240,6 +256,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.25.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.21.0...v0.22.0

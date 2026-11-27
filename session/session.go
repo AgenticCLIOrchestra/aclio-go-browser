@@ -15,7 +15,6 @@ package session
 import (
 	"errors"
 	"fmt"
-	"github.com/agenticcliorchestra/aclio-go-browser/action"
 	"path/filepath"
 
 	"github.com/agenticcliorchestra/aclio-go-browser/engine"
@@ -97,9 +96,9 @@ type Browser struct {
 	active       playwright.Page
 	artifactsDir string
 	closed       bool
-	announcer    *announcer      // nil unless StartAnnouncing was called
-	nvdaMode     action.NVDAMode // the simulated NVDA's mode; "" means action.NVDAModeFocus
-	logs         *debugLogs      // nil unless Opts.ConsoleLog or NetworkLog is set (and could be opened)
+	announcer    *announcer // nil unless StartAnnouncing was called
+	nvda         *nvdaState // the simulated NVDA's mode and reading cursor; nil until first needed
+	logs         *debugLogs // nil unless Opts.ConsoleLog or NetworkLog is set (and could be opened)
 }
 
 // Engine reports which browser b is.
