@@ -130,7 +130,7 @@ func perform(b *Browser, a action.Action) (*string, error) {
 			// before the first key.
 			processAnnouncements(b.announcer)
 		}
-		if m := NVDAMode(b); m != action.NVDAModeBrowse && m != action.NVDAModeOneKeyPass {
+		if !nvdaTakesKeys(b) {
 			return nil, keyboard.Type(d.Text)
 		}
 		return typeThroughNVDA(b, d.Text)

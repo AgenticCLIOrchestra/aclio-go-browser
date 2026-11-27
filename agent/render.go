@@ -168,10 +168,20 @@ through", the next key goes straight to the page whatever NVDA would do with
 it (in browse mode, a letter types instead of jumping, an arrow key reaches the
 page), and NVDA is then back in the mode it was in.`, action.NVDAModeOneKeyPass)
 	}
+	if slices.Contains(allowed, action.NVDAModeInputHelp) {
+		text += fmt.Sprintf(`
+
+%q (or pressing NVDA+1) makes every key say what it would do instead of
+doing it: its name, the character it would type, and what the NVDA command
+bound to it does in the mode NVDA was in (e.g. "h", "moves to the next
+heading"; a key NVDA has no description for says only its name). Nothing
+happens and no key reaches the page until you press NVDA+1 again (or set
+another mode), and NVDA is back in the mode it was in.`, action.NVDAModeInputHelp)
+	}
 	var other []string
 	for _, m := range allowed {
 		switch m {
-		case action.NVDAModeFocus, action.NVDAModeBrowse, action.NVDAModeOneKeyPass:
+		case action.NVDAModeFocus, action.NVDAModeBrowse, action.NVDAModeOneKeyPass, action.NVDAModeInputHelp:
 		default:
 			other = append(other, fmt.Sprintf("%q", m))
 		}

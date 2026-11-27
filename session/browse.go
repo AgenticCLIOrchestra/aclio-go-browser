@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -159,11 +160,14 @@ func setNVDAMode(b *Browser, m action.NVDAMode) error {
 	a := b.announcer
 	if a == nil {
 		st := nvdaOf(b)
-		if m == action.NVDAModeOneKeyPass {
+		switch m {
+		case action.NVDAModeOneKeyPass:
 			enterPassThrough(nil, st)
-			return nil
+		case action.NVDAModeInputHelp:
+			enterInputHelp(nil, st)
+		default:
+			st.mode, st.auto = m, false
 		}
-		st.mode, st.auto = m, false
 		return nil
 	}
 	a.mu.Lock()
@@ -172,9 +176,15 @@ func setNVDAMode(b *Browser, m action.NVDAMode) error {
 		a.nvda = nvdaOf(b)
 	}
 	processLocked(a)
-	if m == action.NVDAModeOneKeyPass {
+	switch {
+	case m == action.NVDAModeOneKeyPass:
 		enterPassThrough(a, a.nvda)
 		return nil
+	case m == action.NVDAModeInputHelp:
+		enterInputHelp(a, a.nvda)
+		return nil
+	case modeOf(a.nvda) == action.NVDAModeInputHelp:
+		leaveInputHelp(a, a.nvda) // then on to the mode asked for
 	}
 	switchMode(a, a.nvda, m, false)
 	if m == action.NVDAModeBrowse {
@@ -475,6 +485,14 @@ func nvdaKey(b *Browser, key string) (bool, *string, error) {
 		msg := fmt.Sprintf("NVDA passed this key straight through to the page; it is back in %q mode.", modeOf(st))
 		return false, &msg, nil
 	}
+	// Input help: every key says what it would do instead of doing it.
+	if mode == action.NVDAModeInputHelp {
+		return handled(inputHelpKey(a, st, k))
+	}
+	if k.nvda && k.base == "1" {
+		enterInputHelp(a, st)
+		return handled("NVDA turned input help on: each key now says what it would do instead of doing it.")
+	}
 	if k.nvda && k.base == "F2" {
 		enterPassThrough(a, st)
 		return handled("NVDA will pass the next key straight through to the page, whatever its mode.")
@@ -562,8 +580,8 @@ func nvdaKey(b *Browser, key string) (bool, *string, error) {
 		}
 		return handled("NVDA activated the element under its reading cursor.")
 	case k.isChar():
-		if q, ok := quickNavKeys[strings.ToLower(k.base)]; ok {
-			quickNav(a, buf, q, !k.shift)
+		if name := strings.ToLower(k.base); quickNavKeys[name].match != nil {
+			quickNav(a, buf, name, !k.shift)
 			return handled(nvdaHandled)
 		}
 		return handled(nvdaTrapped)
@@ -571,6 +589,20 @@ func nvdaKey(b *Browser, key string) (bool, *string, error) {
 		return false, nil, nil // Tab, Escape, F-keys, Backspace, … reach the page
 	}
 	return handled(nvdaHandled)
+}
+
+// nvdaTakesKeys reports whether NVDA's mode makes it look at typed
+// characters one by one (browse mode, one-key pass-through, input help) while
+// b announces; otherwise text is typed straight into the page.
+func nvdaTakesKeys(b *Browser) bool {
+	if b.announcer == nil {
+		return false
+	}
+	switch NVDAMode(b) {
+	case action.NVDAModeBrowse, action.NVDAModeOneKeyPass, action.NVDAModeInputHelp:
+		return true
+	}
+	return false
 }
 
 // typeThroughNVDA types text key by key in browse mode: each character goes
@@ -582,7 +614,7 @@ func nvdaKey(b *Browser, key string) (bool, *string, error) {
 func typeThroughNVDA(b *Browser, text string) (*string, error) {
 	kept := 0
 	for i, r := range text {
-		if m := NVDAMode(b); m != action.NVDAModeBrowse && m != action.NVDAModeOneKeyPass {
+		if !nvdaTakesKeys(b) {
 			return keptResult(kept), b.active.Keyboard().Type(text[i:])
 		}
 		ch := string(r)
@@ -754,6 +786,44 @@ type quickNavKey struct {
 	match func(f preset.BrowseField) bool
 }
 
+// headingLevel is the heading level quick navigation key k (lower case)
+// moves by: 1-6 for the digit keys, 0 otherwise.
+func headingLevel(k string) int {
+	if len(k) == 1 && k[0] >= '1' && k[0] <= '6' {
+		return int(k[0] - '0')
+	}
+	return 0
+}
+
+// quickNavError is what NVDA says when there's no next (or previous)
+// element for quick navigation key k: "no next heading", or, for a heading
+// level, "No next heading at level 2" (browseMode.py's nextError /
+// prevError).
+func quickNavError(k string, forward bool) string {
+	dir := "next"
+	if !forward {
+		dir = "previous"
+	}
+	if l := headingLevel(k); l > 0 {
+		return "No " + dir + " heading at level " + strconv.Itoa(l)
+	}
+	return "no " + dir + " " + quickNavKeys[k].what
+}
+
+// quickNavDoc is quick navigation key k's command description, as input
+// help says it: "moves to the next heading", or "Moves to the next heading
+// at level 2" (browseMode.py's nextDoc / prevDoc).
+func quickNavDoc(k string, forward bool) string {
+	dir := "next"
+	if !forward {
+		dir = "previous"
+	}
+	if l := headingLevel(k); l > 0 {
+		return "Moves to the " + dir + " heading at level " + strconv.Itoa(l)
+	}
+	return "moves to the " + dir + " " + quickNavKeys[k].what
+}
+
 func roleIn(roles ...string) func(preset.BrowseField) bool {
 	return func(f preset.BrowseField) bool {
 		for _, r := range roles {
@@ -775,12 +845,12 @@ func headingAt(level int) func(preset.BrowseField) bool {
 // mode (browseMode.py's qn table), with Shift moving backwards.
 var quickNavKeys = map[string]quickNavKey{
 	"h": {"heading", roleIn("heading")},
-	"1": {"heading at level 1", headingAt(1)},
-	"2": {"heading at level 2", headingAt(2)},
-	"3": {"heading at level 3", headingAt(3)},
-	"4": {"heading at level 4", headingAt(4)},
-	"5": {"heading at level 5", headingAt(5)},
-	"6": {"heading at level 6", headingAt(6)},
+	"1": {"heading", headingAt(1)},
+	"2": {"heading", headingAt(2)},
+	"3": {"heading", headingAt(3)},
+	"4": {"heading", headingAt(4)},
+	"5": {"heading", headingAt(5)},
+	"6": {"heading", headingAt(6)},
 	"k": {"link", roleIn("link")},
 	"f": {"form field", roleIn("button", "checkbox", "radio", "switch", "combobox", "textbox", "searchbox",
 		"listbox", "slider", "spinbutton", "tree", "menuitemcheckbox", "menuitemradio")},
@@ -808,9 +878,10 @@ var quickNavKeys = map[string]quickNavKey{
 	"q": {"block quote", roleIn("blockquote")},
 }
 
-// quickNav moves to the next (or previous) element q matches and reads it,
-// or says there is none ("no next heading").
-func quickNav(a *announcer, buf *vbuf, q quickNavKey, forward bool) {
+// quickNav moves to the next (or previous) element quick navigation key name
+// matches and reads it, or says there is none ("no next heading").
+func quickNav(a *announcer, buf *vbuf, name string, forward bool) {
+	q := quickNavKeys[name]
 	st := a.nvda
 	cur := -1
 	if s, ok := segAt(buf, st.line, st.offset); ok {
@@ -837,11 +908,7 @@ func quickNav(a *announcer, buf *vbuf, q quickNavKey, forward bool) {
 		}
 	}
 	if found < 0 {
-		dir := "next"
-		if !forward {
-			dir = "previous"
-		}
-		sayNVDA(a, "no "+dir+" "+q.what)
+		sayNVDA(a, quickNavError(name, forward))
 		return
 	}
 	speakNode(a, buf, found)

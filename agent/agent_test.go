@@ -118,7 +118,10 @@ func TestScreenReaderGuideFollowsPreset(t *testing.T) {
 	if !strings.Contains(text, `"One-key pass-through" (or pressing NVDA+F2) lasts one key`) {
 		t.Error("blind preset's prompt doesn't explain one-key pass-through")
 	}
-	if !strings.Contains(text, `"Input help", "Review", "Native selection" only turn VoiceOver off`) {
+	if !strings.Contains(text, `"Input help" (or pressing NVDA+1) makes every key say what it would do`) {
+		t.Error("blind preset's prompt doesn't explain input help")
+	}
+	if !strings.Contains(text, `"Review", "Native selection" only turn VoiceOver off`) {
 		t.Error("blind preset's prompt doesn't name the modes that aren't simulated")
 	}
 	// A preset that hears the screen readers but can't change NVDA's mode

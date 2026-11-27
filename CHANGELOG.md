@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.0] - 2026-11-27
+
+### Added
+- NVDA's input help. The `Input help` mode, or NVDA+1 (as NVDA's `toggleInputHelp`), makes NVDA say "input help on. Press insert+1 again to turn it off.", and from then on every key, and every character of a `type` action, says what it would do instead of doing it, as NVDA's `_handleInputHelp` does:
+  - the key's name as NVDA says it ("shift+h", "ctrl+home", "down arrow", "insert+f2"), from NVDA's key labels
+  - the character it would type when that's different ("H")
+  - the description of the command bound to it in the mode NVDA was in, word for word from NVDA's source ("moves to the next heading", "Moves to the next heading at level 2", "Activates the current object in the document", and those of NVDA+Space, NVDA+F2, NVDA+1 and say all). The cursor movement keys have no description there, so only their name is said
+- Nothing happens and no key reaches the page while input help is on, and the action's result says so. NVDA+1 again, or `nvdaChangeMode`, turns it off ("input help off"), back in the mode NVDA was in
+
+### Changed
+- `DefaultInitialPrompt` explains input help to a preset that allows it
+
+### Fixed
+- In browse mode, the heading-level quick navigation keys (1–6) now say "No next heading at level 2" / "No previous heading at level 2", as NVDA does, instead of "no next heading at level 2"
+
 ## [0.26.0] - 2026-11-27
 
 ### Added
@@ -264,6 +279,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.27.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.23.0...v0.24.0
