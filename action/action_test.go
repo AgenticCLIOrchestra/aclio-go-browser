@@ -37,6 +37,7 @@ var valid = map[Type]Data{
 	TypeCreateArtifact: CreateArtifact{Name: "notes.md", Content: "hi"},
 	TypeReadArtifact:   ReadArtifact{Name: "notes.md"},
 	TypeListArtifacts:  ListArtifacts{},
+	TypeNVDAChangeMode: NVDAChangeMode{Mode: NVDAModeBrowse},
 }
 
 func TestSamplesCoverRegistry(t *testing.T) {
@@ -217,6 +218,7 @@ func TestValidateRejects(t *testing.T) {
 		"screenshot name too long with .png": {Type: TypeScreenshot, Data: Screenshot{Name: strings.Repeat("a", 252)}},
 		"artifact escapes dir":               {Type: TypeCreateArtifact, Data: CreateArtifact{Name: "../../some-shit.md"}},
 		"read escapes dir":                   {Type: TypeReadArtifact, Data: ReadArtifact{Name: "../secret"}},
+		"unknown NVDA mode":                  {Type: TypeNVDAChangeMode, Data: NVDAChangeMode{Mode: "browse"}},
 	}
 	for name, a := range cases {
 		if err := Validate(a); err == nil {
@@ -274,5 +276,28 @@ func TestCompact(t *testing.T) {
 	got := Compact(Screenshot{Name: "x"})
 	if !reflect.DeepEqual(got, map[string]any{"name": "x"}) {
 		t.Errorf("Compact = %v", got)
+	}
+}
+
+// Every listed mode is valid, an empty one means Focus, and the schema offers
+// exactly the listed modes.
+func TestNVDAModes(t *testing.T) {
+	for _, m := range append(NVDAModes(), "") {
+		if err := Validate(Action{Type: TypeNVDAChangeMode, Data: NVDAChangeMode{Mode: m}}); err != nil {
+			t.Errorf("%q: %v", m, err)
+		}
+	}
+	if m, err := ResolveNVDAMode(""); err != nil || m != NVDAModeFocus {
+		t.Errorf("zero = %q, %v", m, err)
+	}
+	s, err := Schema([]Type{TypeNVDAChangeMode}, Targeting{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(s)
+	for _, m := range NVDAModes() {
+		if !strings.Contains(string(b), `"`+string(m)+`"`) {
+			t.Errorf("schema lacks mode %q: %s", m, b)
+		}
 	}
 }

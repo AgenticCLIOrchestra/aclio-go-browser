@@ -591,3 +591,29 @@ func TestE2ENotSelected(t *testing.T) {
 		t.Errorf("on to Cherry (no aria-selected): NVDA %q, want %q", nvda, want)
 	}
 }
+
+// Switching NVDA to any mode but Focus turns VoiceOver off; NVDA goes on
+// speaking. Back in Focus, VoiceOver speaks again.
+func TestE2ENVDAModeTurnsVoiceOverOff(t *testing.T) {
+	e2e(t)
+	b := openAnnouncing(t, liveServer(t), "/form")
+	mode := func(m action.NVDAMode) action.Action {
+		return action.Action{Type: action.TypeNVDAChangeMode, Data: action.NVDAChangeMode{Mode: m}}
+	}
+	do(t, b, press("Tab"), mode(action.NVDAModeBrowse), press("Tab"))
+	vo, nvda := heardBoth(t, b, "", 500*time.Millisecond)
+	if want := []string{"main", "Prefs", "form", "First", "edit text"}; !reflect.DeepEqual(vo, want) {
+		t.Errorf("VoiceOver said %q, want only what it said before Browse %q", vo, want)
+	}
+	if want := []string{"main landmark", "Prefs", "form", "First", "edit", "Second", "edit"}; !reflect.DeepEqual(nvda, want) {
+		t.Errorf("NVDA said %q, want %q", nvda, want)
+	}
+	if got := NVDAMode(b); got != action.NVDAModeBrowse {
+		t.Errorf("mode = %q", got)
+	}
+	do(t, b, mode(action.NVDAModeFocus), press("Tab"))
+	vo, nvda = heardBoth(t, b, "", 500*time.Millisecond)
+	if want := []string{"Save", "button"}; !reflect.DeepEqual(vo, want) || !reflect.DeepEqual(nvda, want) {
+		t.Errorf("back in Focus: VoiceOver %q, NVDA %q, want both %q", vo, nvda, want)
+	}
+}

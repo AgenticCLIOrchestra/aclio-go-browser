@@ -28,15 +28,15 @@ res, err := browser.Run(browser.Request{
 
 ## Packages
 
-| Package  | What it gives you |
-|----------|-------------------|
-| `browser` (root) | `Run` (one call does a whole task), `Loop` and `Perform` (the same loop on a browser you manage), `Options`, `ResolveDirs` |
-| `session` | One live browser: `Open` / `Close`, `Perform`, `Snapshot`, `Tabs`, `Focused`, `Navigate`. The only package that talks to Playwright |
-| `agent` | The agent's side of each turn: `Initial` / `Subsequent`, our prompt templates, the response schema, examples |
-| `action` | Every action an agent may request, as a `{type, data}` union; the JSON schema for any mix of them; `Validate` |
-| `preset` | Agent personas: which actions are offered, how elements may be targeted, what page state is perceived and how it is described. Built-ins plus a public type for your own |
-| `engine` | The `Browser` enum (`Chromium`, `Firefox`), re-exported from the root |
-| `browserinstall` | Opt-in `Ensure` that downloads the Playwright driver and the browsers you ask for, if they're missing |
+| Package          | What it gives you                                                                                                                                                        |
+|------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `browser` (root) | `Run` (one call does a whole task), `Loop` and `Perform` (the same loop on a browser you manage), `Options`, `ResolveDirs`                                               |
+| `session`        | One live browser: `Open` / `Close`, `Perform`, `Snapshot`, `Tabs`, `Focused`, `Navigate`. The only package that talks to Playwright                                      |
+| `agent`          | The agent's side of each turn: `Initial` / `Subsequent`, our prompt templates, the response schema, examples                                                             |
+| `action`         | Every action an agent may request, as a `{type, data}` union; the JSON schema for any mix of them; `Validate`                                                            |
+| `preset`         | Agent personas: which actions are offered, how elements may be targeted, what page state is perceived and how it is described. Built-ins plus a public type for your own |
+| `engine`         | The `Browser` enum (`Chromium`, `Firefox`), re-exported from the root                                                                                                    |
+| `browserinstall` | Opt-in `Ensure` that downloads the Playwright driver and the browsers you ask for, if they're missing                                                                    |
 
 ## Running a task
 
@@ -63,13 +63,13 @@ type Request struct {
 
 Each layer under `Run` is public, and the higher ones are built only from the lower ones:
 
-| Layer | Owns the browser? | Prompt |
-|-------|-------------------|--------|
-| `browser.Run(req)` | yes: opens and closes it | optional (ours by default) |
-| `browser.Loop(b, req, dirs)` | no: you `session.Open` and `session.Close` | optional (ours by default) |
-| `browser.Perform(b, preset, actions)` | no | none |
-| `agent.Initial` / `agent.Subsequent` | never touches a browser | **required** |
-| `session.Open` / `Perform` / `Snapshot` / `Close` | `Open` and `Close` do | none |
+| Layer                                             | Owns the browser?                          | Prompt                     |
+|---------------------------------------------------|--------------------------------------------|----------------------------|
+| `browser.Run(req)`                                | yes: opens and closes it                   | optional (ours by default) |
+| `browser.Loop(b, req, dirs)`                      | no: you `session.Open` and `session.Close` | optional (ours by default) |
+| `browser.Perform(b, preset, actions)`             | no                                         | none                       |
+| `agent.Initial` / `agent.Subsequent`              | never touches a browser                    | **required**               |
+| `session.Open` / `Perform` / `Snapshot` / `Close` | `Open` and `Close` do                      | none                       |
 
 ```go
 dirs, _ := browser.ResolveDirs(opts)
@@ -119,13 +119,14 @@ turn, err := agent.Initial(agent.InitialRequest{
 
 Every action has exactly one payload shape, and every JSON name is camelCase.
 
-| Group     | Types |
-|-----------|-------|
-| Pointer   | `click`, `doubleClick`, `hover`, `mouseDown`, `mouseUp`, `scroll` |
-| Keyboard  | `type` (keystrokes, appends), `fill` (replaces an input's value), `press` (a key or chord like `Shift+Tab`) |
-| Page      | `wait`, `goTo`, `javascript` |
-| Tabs      | `tabOpen`, `tabSwitch`, `tabClose` |
-| Artifacts | `screenshot`, `createArtifact`, `readArtifact`, `listArtifacts`: create-only files in the artifacts directory (never edited or overwritten) |
+| Group         | Types                                                                                                                                                                                                                                                                                                                                                               |
+|---------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Pointer       | `click`, `doubleClick`, `hover`, `mouseDown`, `mouseUp`, `scroll`                                                                                                                                                                                                                                                                                                   |
+| Keyboard      | `type` (keystrokes, appends), `fill` (replaces an input's value), `press` (a key or chord like `Shift+Tab`)                                                                                                                                                                                                                                                         |
+| Page          | `wait`, `goTo`, `javascript`                                                                                                                                                                                                                                                                                                                                        |
+| Tabs          | `tabOpen`, `tabSwitch`, `tabClose`                                                                                                                                                                                                                                                                                                                                  |
+| Artifacts     | `screenshot`, `createArtifact`, `readArtifact`, `listArtifacts`: create-only files in the artifacts directory (never edited or overwritten)                                                                                                                                                                                                                         |
+| Screen reader | `nvdaChangeMode`: sets the simulated NVDA's mode (`mode`: `Focus`, the default, `Browse`, `One-key pass-through`, `Speech`, `Sleep`, `Input help`, `Review` or `Native selection`). Any mode but `Focus` turns VoiceOver off. Only for a preset that perceives the focused element (`preset.Validate` refuses it otherwise); `action.IsScreenReader` tells it apart |
 
 Elements are picked with a `Target`: a CSS `selector` **or** a viewport `point`, never both.
 
@@ -168,12 +169,12 @@ type Preset struct {
 
 ### Built-ins
 
-| Preset      | Actions | Targeting | Perceives |
-|-------------|---------|-----------|-----------|
-| `Default()` | everything except the artifact actions (`javascript` included) | selector, point | screenshot, DOM, tabs |
-| `Full()`    | everything | selector, point | screenshot, DOM, tabs |
-| `Blind()`   | `type`, `press`, `wait`, tabs | none | what two screen readers say, VoiceOver and NVDA (focused element), tabs |
-| `Motor()`   | `Blind`'s actions plus `goTo` | none | screenshot, DOM, tabs |
+| Preset      | Actions                                                                             | Targeting       | Perceives                                                               |
+|-------------|-------------------------------------------------------------------------------------|-----------------|-------------------------------------------------------------------------|
+| `Default()` | everything except the artifact actions and `nvdaChangeMode` (`javascript` included) | selector, point | screenshot, DOM, tabs                                                   |
+| `Full()`    | everything except `nvdaChangeMode`                                                  | selector, point | screenshot, DOM, tabs                                                   |
+| `Blind()`   | `type`, `press`, `wait`, tabs, `nvdaChangeMode` (not `Sleep` or `Speech`)           | none            | what two screen readers say, VoiceOver and NVDA (focused element), tabs |
+| `Motor()`   | `Blind`'s actions plus `goTo`                                                       | none            | screenshot, DOM, tabs                                                   |
 
 **`Blind()` runs on Chromium only.** Any preset that perceives the focused element (`Blind()` and every copy of it, renamed or not) is refused on Firefox: its screen-reader view comes partly from Chromium's own accessibility tree (the computed `role`, the accessible `name`, the `value`, the `description`, the states and properties and the `context`), which Firefox doesn't expose. `Run` refuses before creating any directory or launching the browser; `Loop` refuses before the first turn. `Default()`, `Full()` and `Motor()` run on either browser.
 
@@ -201,6 +202,17 @@ NVDA said, in order:
 ```
 
 When NVDA said the same, its part is one line, `NVDA said the same.`
+
+**NVDA's mode.** The `nvdaChangeMode` action sets the simulated NVDA's mode (`session.NVDAMode` reads it, and
+`State.NVDAMode` carries it each turn). `Focus` is the default. Any other mode turns VoiceOver off: from the switch on,
+only what NVDA says is recorded, as NVDA's alone, until the mode is `Focus` again, since VoiceOver has no such modes.
+Every turn VoiceOver is off, `DescribeAnnouncement` says so first
+(`VoiceOver is off because NVDA's mode is set to "Browse", not "Focus". …`), then what VoiceOver said before it was
+turned off, then NVDA's feed in full. Only the mode and VoiceOver are simulated: NVDA itself goes on speaking as in
+focus mode, and its prompt paragraph tells the agent so. `Preset.NVDAModes` limits the modes a preset may set (nil: all
+of them; it must include `Focus`); `preset.Check` refuses the others and the schema doesn't offer them. `Blind()` leaves
+out `Sleep` and `Speech`: both silence NVDA, which, with VoiceOver off, would leave a blind user with no speech at all.
+`Default()`, `Full()` and `Motor()` hear no screen reader, so they don't get the action.
 
 It is recorded as it happens, not worked out from where the page ends up: `Run` and `Loop` call `session.StartAnnouncing` for a preset that perceives the focused element. From then on the page queues the element focused at every `focusin`, and at every change to the focused element or its active descendant (`input`, `change`, and the attributes a screen reader announces). Go turns each into an announcement, in the background as the page signals, after each action `Perform` runs, and when a turn takes them with `session.TakeAnnouncements`, which also empties the store. So a batch of actions (Tab, Tab, Space, …) is heard step by step, and so are changes the page makes by itself, such as a dialog taking focus while the agent is thinking. Switching tabs announces where focus is in the new one. Focus inside iframes isn't heard yet.
 

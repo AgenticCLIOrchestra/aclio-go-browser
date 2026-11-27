@@ -14,19 +14,21 @@ import (
 // WithArtifacts to add them to any other preset.
 
 // Default is the most capable persona that stays inside the browser: every
-// action except the artifact ones, including javascript, with selector and
-// point targeting, and a screenshot + DOM each turn.
+// action except the artifact ones and the screen-reader one (it hears no
+// screen reader), including javascript, with selector and point targeting,
+// and a screenshot + DOM each turn.
 func Default() Preset {
 	return Preset{
 		Name:      "default",
-		Actions:   slices.DeleteFunc(action.All(), action.IsArtifact),
+		Actions:   slices.DeleteFunc(action.All(), func(t action.Type) bool { return action.IsArtifact(t) || action.IsScreenReader(t) }),
 		Targeting: action.Targeting{Selector: true, Point: true},
 		Perceive:  Perception{Screenshot: true, DOM: true, Tabs: true},
 		Describe:  Combine(DescribeFiles, DescribeTabs),
 	}
 }
 
-// Full is Default plus the artifact actions: everything.
+// Full is Default plus the artifact actions: everything but the
+// screen-reader action, since it hears no screen reader.
 func Full() Preset {
 	p := WithArtifacts(Default())
 	p.Name = "full"
@@ -41,9 +43,13 @@ func Full() Preset {
 func Blind() Preset {
 	return Preset{
 		Name:     "blind",
-		Actions:  keyboardOnly(),
+		Actions:  append(keyboardOnly(), action.TypeNVDAChangeMode),
 		Perceive: Perception{Focused: true, Tabs: true},
-		Describe: Combine(DescribeAnnouncement, DescribeTabs),
+		// Not Sleep or Speech: both silence NVDA (sleep mode, or a speech
+		// mode other than talk), and with VoiceOver off in any mode but
+		// Focus, a blind user would be left with no speech at all.
+		NVDAModes: blindNVDAModes(),
+		Describe:  Combine(DescribeAnnouncement, DescribeTabs),
 	}
 }
 
@@ -61,6 +67,14 @@ func Motor() Preset {
 // Builtins returns fresh copies of every built-in preset.
 func Builtins() []Preset {
 	return []Preset{Default(), Full(), Blind(), Motor()}
+}
+
+// blindNVDAModes are the NVDA modes a blind user can work in: every mode but
+// Sleep and Speech.
+func blindNVDAModes() []action.NVDAMode {
+	return slices.DeleteFunc(action.NVDAModes(), func(m action.NVDAMode) bool {
+		return m == action.NVDAModeSleep || m == action.NVDAModeSpeech
+	})
 }
 
 // keyboardOnly is the action set of the keyboard-only personas.

@@ -38,8 +38,21 @@ func TestDefaultVersusFull(t *testing.T) {
 	if UsesArtifacts(def) {
 		t.Error("default should not use artifacts")
 	}
-	if !UsesArtifacts(full) || !slices.Equal(full.Actions, action.All()) {
-		t.Errorf("full should allow every action, got %v", full.Actions)
+	if want := slices.DeleteFunc(action.All(), action.IsScreenReader); !UsesArtifacts(full) || !slices.Equal(full.Actions, want) {
+		t.Errorf("full should allow every action but the screen-reader one, got %v", full.Actions)
+	}
+	for _, p := range []Preset{def, full, Motor()} {
+		if Allows(p, action.TypeNVDAChangeMode) {
+			t.Errorf("%s hears no screen reader, but allows %s", p.Name, action.TypeNVDAChangeMode)
+		}
+	}
+	if !Allows(Blind(), action.TypeNVDAChangeMode) {
+		t.Errorf("blind should allow %s", action.TypeNVDAChangeMode)
+	}
+	bad := Default()
+	bad.Actions = append(bad.Actions, action.TypeNVDAChangeMode)
+	if err := Validate(bad); err == nil {
+		t.Errorf("Validate should refuse %s without Perceive.Focused", action.TypeNVDAChangeMode)
 	}
 }
 
@@ -183,6 +196,33 @@ func TestDescribeAnnouncement(t *testing.T) {
 	}
 }
 
+// While NVDA's mode isn't Focus, VoiceOver is off: the agent is told so first
+// every such turn, then what VoiceOver said before, then NVDA's feed in full.
+func TestDescribeAnnouncementVoiceOverOff(t *testing.T) {
+	both := func(text string) Announcement { return Announcement{Text: text, VoiceOver: true, NVDA: true} }
+	nvda := func(text string) Announcement { return Announcement{Text: text, NVDA: true} }
+	off := `VoiceOver is off because NVDA's mode is set to "Browse", not "Focus". Set it back to "Focus" with nvdaChangeMode to hear VoiceOver again.`
+	for _, c := range []struct {
+		name string
+		said []Announcement
+		want string
+	}{
+		{"silent", nil, off + "\nNVDA said nothing this turn."},
+		{"NVDA spoke", []Announcement{nvda("Save"), nvda("button")}, off + "\nNVDA said, in order:\n- Save\n- button"},
+		{"turned off mid-turn", []Announcement{both("Agree"), nvda("Save")},
+			off + "\nBefore it was turned off, VoiceOver said, in order:\n- Agree\nNVDA said, in order:\n- Agree\n- Save"},
+	} {
+		if got := DescribeAnnouncement(State{Announcement: c.said, NVDAMode: action.NVDAModeBrowse}); got != c.want {
+			t.Errorf("%s: got\n%s\nwant\n%s", c.name, got, c.want)
+		}
+	}
+	for _, m := range []action.NVDAMode{"", action.NVDAModeFocus} {
+		if got := DescribeAnnouncement(State{NVDAMode: m}); got != "VoiceOver and NVDA said nothing this turn." {
+			t.Errorf("mode %q: got %q", m, got)
+		}
+	}
+}
+
 func TestSaidFeeds(t *testing.T) {
 	said := []Announcement{{Text: "a", VoiceOver: true, NVDA: true}, {Text: "b", NVDA: true}, {Text: "c", VoiceOver: true}}
 	if got := VoiceOverSaid(said); !reflect.DeepEqual(got, []string{"a", "c"}) {
@@ -193,5 +233,52 @@ func TestSaidFeeds(t *testing.T) {
 	}
 	if got := NVDASaid(nil); got == nil || len(got) != 0 {
 		t.Errorf("NVDASaid(nil) = %#v, want empty", got)
+	}
+}
+
+// Blind can't set the modes a blind user can't work in (Sleep, Speech): the
+// schema doesn't offer them and Check refuses them. A preset without
+// NVDAModes allows every mode; one that sets them must include Focus.
+func TestNVDAModesRestriction(t *testing.T) {
+	mode := func(m action.NVDAMode) action.Action {
+		return action.Action{Type: action.TypeNVDAChangeMode, Data: action.NVDAChangeMode{Mode: m}}
+	}
+	blind := Blind()
+	for _, m := range []action.NVDAMode{action.NVDAModeSleep, action.NVDAModeSpeech} {
+		if err := Check(blind, mode(m)); err == nil {
+			t.Errorf("blind allows %q", m)
+		}
+	}
+	for _, m := range []action.NVDAMode{"", action.NVDAModeFocus, action.NVDAModeBrowse, action.NVDAModeOneKeyPass,
+		action.NVDAModeInputHelp, action.NVDAModeReview, action.NVDAModeNativeSelection} {
+		if err := Check(blind, mode(m)); err != nil {
+			t.Errorf("blind refuses %q: %v", m, err)
+		}
+	}
+	s, err := Schema(blind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enum := s["properties"].(map[string]any)["data"].(map[string]any)["properties"].(map[string]any)["mode"].(map[string]any)["enum"]
+	if want := []any{"Focus", "Browse", "One-key pass-through", "Input help", "Review", "Native selection"}; !reflect.DeepEqual(enum, want) {
+		t.Errorf("blind mode enum = %v, want %v", enum, want)
+	}
+	// Other presets aren't restricted: one without NVDAModes allows every mode.
+	open := Blind()
+	open.NVDAModes = nil
+	if err := Check(open, mode(action.NVDAModeSleep)); err != nil {
+		t.Errorf("unrestricted preset refuses Sleep: %v", err)
+	}
+	// Fresh copies: changing one Blind() doesn't change the next.
+	blind.NVDAModes[0] = action.NVDAModeSleep
+	if Blind().NVDAModes[0] != action.NVDAModeFocus {
+		t.Error("Blind() shares its NVDAModes")
+	}
+	for _, modes := range [][]action.NVDAMode{{action.NVDAModeBrowse}, {action.NVDAModeFocus, "Hover"}} {
+		bad := Blind()
+		bad.NVDAModes = modes
+		if err := Validate(bad); err == nil {
+			t.Errorf("Validate accepts NVDAModes %q", modes)
+		}
 	}
 }

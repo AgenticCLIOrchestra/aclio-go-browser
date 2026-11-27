@@ -101,6 +101,13 @@ type TabClose struct {
 	Index int `json:"index" description:"tabSwitch/tabClose: 1-based position of the tab"`
 }
 
+// NVDAChangeMode sets the simulated NVDA screen reader's mode. An empty Mode
+// means NVDAModeFocus. Any mode but Focus turns VoiceOver off until the mode
+// is set back to Focus.
+type NVDAChangeMode struct {
+	Mode NVDAMode `json:"mode,omitempty" enum:"Focus,Browse,One-key pass-through,Speech,Sleep,Input help,Review,Native selection" description:"nvdaChangeMode: NVDA's mode; Focus (the default) keeps VoiceOver on, any other mode turns VoiceOver off"`
+}
+
 // Javascript evaluates Code in the active page.
 type Javascript struct {
 	Code string `json:"code" description:"javascript: script to evaluate in the active page"`
@@ -151,6 +158,7 @@ func (GoTo) isData()           {}
 func (TabOpen) isData()        {}
 func (TabSwitch) isData()      {}
 func (TabClose) isData()       {}
+func (NVDAChangeMode) isData() {}
 func (Javascript) isData()     {}
 func (Screenshot) isData()     {}
 func (CreateArtifact) isData() {}

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0] - 2026-11-27
+
+### Added
+- A `nvdaChangeMode` action (`action.TypeNVDAChangeMode`, payload `action.NVDAChangeMode`) that sets the simulated NVDA's mode: `Focus` (the default, also for an empty `mode`), `Browse`, `One-key pass-through`, `Speech`, `Sleep`, `Input help`, `Review` or `Native selection` (`action.NVDAMode`, with `action.NVDAModes` and `action.ResolveNVDAMode`). Any mode but `Focus` turns VoiceOver off, since VoiceOver has no such modes: from the switch on, only what NVDA says is recorded, as NVDA's alone, until the mode is `Focus` again. What was said before the switch keeps both readers. Only the mode and VoiceOver are simulated so far: NVDA goes on speaking as in focus mode, and the agent is told so
+- `session.NVDAMode(b)` and `State.NVDAMode`: the simulated NVDA's mode, filled each turn with `State.Announcement`
+- Every turn VoiceOver is off, `DescribeAnnouncement` says so first (`VoiceOver is off because NVDA's mode is set to "Browse", not "Focus". Set it back to "Focus" with nvdaChangeMode to hear VoiceOver again.`), then what VoiceOver said before it was turned off, if anything, then NVDA's feed in full
+- `Preset.NVDAModes`: the modes a preset's `nvdaChangeMode` may set (nil: all of them; it must include `Focus`), with `preset.AllowedNVDAModes`. `preset.Check` refuses the others and `preset.Schema` doesn't offer them
+- `action.IsScreenReader`, which tells the screen-reader action apart from the page actions
+
+### Changed
+- `Blind()` allows `nvdaChangeMode`, with every mode but `Sleep` and `Speech`: both silence NVDA, which, with VoiceOver off, would leave a blind user with no speech at all
+- `Default()` and `Full()` leave out `nvdaChangeMode`, as they hear no screen reader, so `Full()` is now everything but that action. `preset.Validate` refuses `nvdaChangeMode` for a preset that doesn't perceive the focused element
+- `DefaultInitialPrompt` explains `nvdaChangeMode` and the modes the preset allows, only for a preset that allows it
+
 ## [0.23.0] - 2026-11-27
 
 ### Added
@@ -226,6 +240,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.24.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.20.0...v0.21.0

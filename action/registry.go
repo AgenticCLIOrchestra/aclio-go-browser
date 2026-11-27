@@ -44,6 +44,7 @@ var registry = []entry{
 	{TypeCreateArtifact, CreateArtifact{}, decodeAs[CreateArtifact], targetNone, true},
 	{TypeReadArtifact, ReadArtifact{}, decodeAs[ReadArtifact], targetNone, true},
 	{TypeListArtifacts, ListArtifacts{}, decodeAs[ListArtifacts], targetNone, true},
+	{TypeNVDAChangeMode, NVDAChangeMode{}, decodeAs[NVDAChangeMode], targetNone, false},
 }
 
 func decodeAs[T Data](raw json.RawMessage) (Data, error) {
@@ -83,6 +84,13 @@ func All() []Type {
 // any of them needs an artifacts directory. Each call returns a new slice.
 func ArtifactTypes() []Type {
 	return typesWhere(func(e entry) bool { return e.artifact })
+}
+
+// IsScreenReader reports whether t acts on the simulated screen readers
+// (nvdaChangeMode) rather than the page. It only makes sense to an agent that
+// hears them.
+func IsScreenReader(t Type) bool {
+	return t == TypeNVDAChangeMode
 }
 
 // Known reports whether t is a built-in Type.

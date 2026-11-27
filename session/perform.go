@@ -67,6 +67,9 @@ func setReason(p *action.Performed, err error) {
 // it to settle afterwards. The artifact actions only touch the disk
 // (screenshot reads the page but doesn't change it).
 func touchesPage(t action.Type) bool {
+	if t == action.TypeNVDAChangeMode {
+		return false // only the simulated screen reader changes
+	}
 	return !action.IsArtifact(t)
 }
 
@@ -168,6 +171,8 @@ func perform(b *Browser, a action.Action) (*string, error) {
 			return nil, err
 		}
 		return &content, nil
+	case action.NVDAChangeMode:
+		return nil, setNVDAMode(b, d.Mode)
 	case action.ListArtifacts:
 		names, err := listArtifacts(b.artifactsDir)
 		if err != nil {

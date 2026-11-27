@@ -14,6 +14,7 @@ package action
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 )
 
 // Type discriminates which payload an Action carries. Values are camelCase,
@@ -40,7 +41,44 @@ const (
 	TypeCreateArtifact Type = "createArtifact"
 	TypeReadArtifact   Type = "readArtifact"
 	TypeListArtifacts  Type = "listArtifacts"
+	TypeNVDAChangeMode Type = "nvdaChangeMode"
 )
+
+// NVDAMode is a mode of the simulated NVDA screen reader, set with
+// TypeNVDAChangeMode. Only NVDAModeFocus keeps VoiceOver on: VoiceOver has no
+// such modes, so any other mode turns it off. The simulation records the mode
+// and turns VoiceOver off; it doesn't simulate what NVDA itself does
+// differently in each mode yet, so NVDA speaks as in focus mode.
+type NVDAMode string
+
+const (
+	NVDAModeFocus           NVDAMode = "Focus" // the default
+	NVDAModeBrowse          NVDAMode = "Browse"
+	NVDAModeOneKeyPass      NVDAMode = "One-key pass-through"
+	NVDAModeSpeech          NVDAMode = "Speech"
+	NVDAModeSleep           NVDAMode = "Sleep"
+	NVDAModeInputHelp       NVDAMode = "Input help"
+	NVDAModeReview          NVDAMode = "Review"
+	NVDAModeNativeSelection NVDAMode = "Native selection"
+)
+
+// NVDAModes returns every NVDAMode, NVDAModeFocus first.
+func NVDAModes() []NVDAMode {
+	return []NVDAMode{NVDAModeFocus, NVDAModeBrowse, NVDAModeOneKeyPass, NVDAModeSpeech,
+		NVDAModeSleep, NVDAModeInputHelp, NVDAModeReview, NVDAModeNativeSelection}
+}
+
+// ResolveNVDAMode returns m, NVDAModeFocus for the zero value, or an error for
+// a mode that isn't one of NVDAModes.
+func ResolveNVDAMode(m NVDAMode) (NVDAMode, error) {
+	if m == "" {
+		return NVDAModeFocus, nil
+	}
+	if slices.Contains(NVDAModes(), m) {
+		return m, nil
+	}
+	return "", fmt.Errorf("mode %q is not one of %q", m, NVDAModes())
+}
 
 // Data is an Action's payload. It is a closed set: only the payload structs in
 // this package implement it.
