@@ -229,8 +229,12 @@ characters stay on the line, words cross lines. Other keys do what they did in t
 quick navigation, say, or keys reaching the page), and the review cursor follows focus and the browse mode cursor, as
 NVDA's `followFocus` / `followCaret` (on by default) do. Setting another mode leaves it. Real NVDA has the review keys in
 every mode; here they are review mode's, so the numpad still reaches the page elsewhere, and object and screen review,
-spelling on a double press, and the laptop layout aren't simulated. `Speech`, `Sleep`
-and `Native selection` only turn VoiceOver off, NVDA going on speaking as in focus mode there, and the prompt tells
+spelling on a double press, and the laptop layout aren't simulated. `Native selection` is browse mode with NVDA's
+native selection mode on (also NVDA+Shift+F10 in browse mode, as NVDA's `toggleNativeAppSelectionMode`, which its Chrome
+buffer supports): NVDA says "Native app selection mode enabled" / "disabled", mirrors its text selection (see Browse
+mode below) into the page's own selection, and lets Control+C reach the page, which copies the selection itself (its
+copy handlers run). It lasts across switches to focus mode and back, as NVDA's does; setting `Browse` turns it off.
+`Speech` and `Sleep` only turn VoiceOver off, NVDA going on speaking as in focus mode there, and the prompt tells
 the agent so. `Preset.NVDAModes` limits the modes a preset may set (nil: all
 of them; it must include `Focus`); `preset.Check` refuses the others and the schema doesn't offer them. `Blind()` leaves
 out `Sleep` and `Speech`: both silence NVDA, which, with VoiceOver off, would leave a blind user with no speech at all.
@@ -255,6 +259,14 @@ out `Sleep` and `Speech`: both silence NVDA, which, with VoiceOver off, would le
   ("list", "with 2 items", "main landmark", "Prefs", "form", tables "with 3 rows and 4 columns") and, except landmarks,
   when it leaves them ("out of list"). Unnamed groupings and regions are layout and say nothing. List bullets are read
   as "bullet". A field's name isn't repeated when its label was just read on the same line.
+- **Selecting and copying** (NVDA's cursorManager and `speech.speakSelectionChange`): Shift+ArrowRight / Shift+ArrowLeft
+  select by character, Shift+Control+ArrowRight / ArrowLeft by word, Shift+ArrowDown / Shift+ArrowUp by line,
+  Shift+PageDown / Shift+PageUp by 25 lines, Shift+Home / Shift+End to the line's start / end, Shift+Control+Home /
+  Shift+Control+End to the top / bottom, and Control+A everything. NVDA says what became selected ("ead selected") or
+  unselected ("ad unselected"), spelling a single character ("space selected"). Moving the cursor without Shift drops
+  the selection ("Read unselected", after reading where it moved). Control+C copies the selection to the clipboard
+  ("Copied to clipboard: …", the number of characters past 1024, "No selection" or "Unable to copy"), so pasting in a
+  field later pastes it; in native selection mode the selection is the page's and Control+C reaches it instead.
 - **Keys kept from the page:** every key above, Enter and Space (which activate what the cursor is on: a link or button
   is clicked, a field is focused), and any other character key, as NVDA traps keys with no command. So `type` in
   browse mode sends each character to NVDA: letters jump around instead of typing, and the action's result says how
@@ -267,7 +279,7 @@ out `Sleep` and `Speech`: both silence NVDA, which, with VoiceOver off, would le
   feed as `(sound: focus mode)` / `(sound: browse mode)`. In browse mode a focus change reads the focused element
   content first and moves the reading cursor to it.
 
-It doesn't yet read table cell coordinates and headers, reach into iframes, report text selection, or speak the page on
+It doesn't yet read table cell coordinates and headers, reach into iframes, select by paragraph, or speak the page on
 load (NVDA's say all on page load); NVDA's elements list (NVDA+F7) and the quick navigation keys for frames, embedded
 objects, annotations, errors, visited / unvisited links, paragraphs and links blocks aren't simulated (letters with no
 simulated command are kept from the page, as unbound keys are).

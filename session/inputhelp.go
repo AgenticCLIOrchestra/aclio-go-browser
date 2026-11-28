@@ -21,6 +21,8 @@ const (
 	inputHelpPassNextKeyDoc = "The next key that is pressed will not be handled at all by NVDA, it will be passed directly through to Windows."
 	inputHelpSayAllDoc      = "Reads from the system caret up to the end of the text, moving the caret as it goes"
 	inputHelpActivateDoc    = "Activates the current object in the document"
+	// The selection keys and Control+C have none in NVDA's source.
+	inputHelpNativeSelectionDoc = "Toggles native selection mode on and off"
 )
 
 // enterInputHelp turns input help on, remembering the mode NVDA was in. NVDA
@@ -82,6 +84,8 @@ func commandDoc(k key, mode action.NVDAMode) string {
 		return inputHelpPassNextKeyDoc
 	case k.nvda && k.base == "ArrowDown" && !k.ctrl && !k.alt:
 		return inputHelpSayAllDoc
+	case mode == action.NVDAModeBrowse && k.nvda && k.shift && k.base == "F10":
+		return inputHelpNativeSelectionDoc
 	case mode != action.NVDAModeBrowse || k.nvda || k.ctrl || k.alt || k.meta:
 		return ""
 	case k.base == "Enter" || k.base == "Space":

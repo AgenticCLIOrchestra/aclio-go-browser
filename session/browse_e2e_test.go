@@ -269,3 +269,66 @@ func TestE2EReviewMode(t *testing.T) {
 		t.Errorf("leaving review: mode %q, NVDA %q", NVDAMode(b), nvda)
 	}
 }
+
+// Browse mode selects text with Shift and copies it with Control+C to the
+// clipboard (NVDA's own copy); moving without Shift drops the selection. In
+// native selection mode the selection is the page's, and Control+C reaches
+// the page.
+func TestE2ESelection(t *testing.T) {
+	e2e(t)
+	b := openAnnouncing(t, liveServer(t), "/doc")
+	keys := func() string {
+		v, _ := b.active.Evaluate(`() => window.keys.join(",")`)
+		s, _ := v.(string)
+		return s
+	}
+	pageSelection := func() string {
+		v, _ := b.active.Evaluate(`() => window.getSelection().toString()`)
+		s, _ := v.(string)
+		return s
+	}
+	browseStep(t, b, nvdaMode(action.NVDAModeBrowse), press("Control+Home"), press("ArrowDown"))
+	for _, c := range []struct {
+		key  string
+		want []string
+	}{
+		{"Shift+ArrowRight", []string{"R selected"}},
+		{"Control+Shift+ArrowRight", []string{"ead selected"}},
+		{"Control+c", []string{"Copied to clipboard: Read "}},
+	} {
+		if nvda, _, _ := browseStep(t, b, press(c.key)); !reflect.DeepEqual(nvda, c.want) {
+			t.Errorf("%s: NVDA %q, want %q", c.key, nvda, c.want)
+		}
+	}
+	if keys() != "" || pageSelection() != "" {
+		t.Errorf("NVDA's own selection and copy reached the page: keys %q, selection %q", keys(), pageSelection())
+	}
+	if nvda, _, _ := browseStep(t, b, press("ArrowDown")); len(nvda) == 0 || nvda[len(nvda)-1] != "Read unselected" {
+		t.Errorf("moving on: NVDA %q, want it to end with Read unselected", nvda)
+	}
+	if nvda, _, _ := browseStep(t, b, press("Control+c")); !reflect.DeepEqual(nvda, []string{"No selection"}) {
+		t.Errorf("copying nothing: NVDA %q", nvda)
+	}
+	// The copied text is on the clipboard: paste it into the field.
+	browseStep(t, b, typeText("#q", "x"), press("Backspace"), press("ControlOrMeta+v"))
+	if v, _ := b.active.Evaluate(`() => document.getElementById('q').value`); v != "Read " {
+		t.Errorf("pasted %q, want the copied Read ", v)
+	}
+
+	// Native selection mode: the page has the selection, and copies it.
+	browseStep(t, b, nvdaMode(action.NVDAModeBrowse), press("Control+Home"), press("ArrowDown"))
+	b.active.Evaluate(`() => { window.keys.length = 0 }`)
+	if nvda, _, _ := browseStep(t, b, nvdaMode(action.NVDAModeNativeSelection)); !reflect.DeepEqual(nvda, []string{"Native app selection mode enabled"}) || NVDAMode(b) != action.NVDAModeNativeSelection {
+		t.Errorf("native selection on: NVDA %q, mode %q", nvda, NVDAMode(b))
+	}
+	browseStep(t, b, press("Shift+ArrowRight"), press("Control+Shift+ArrowRight"))
+	if got := pageSelection(); got != "Read " {
+		t.Errorf("page selection = %q, want Read ", got)
+	}
+	if _, _, results := browseStep(t, b, press("Control+c")); keys() != "Control,c" || len(results) != 0 {
+		t.Errorf("Control+C in native selection mode: page keys %q, results %q", keys(), results)
+	}
+	if nvda, _, _ := browseStep(t, b, press("NVDA+Shift+F10")); !reflect.DeepEqual(nvda, []string{"Native app selection mode disabled"}) || NVDAMode(b) != action.NVDAModeBrowse || pageSelection() != "" {
+		t.Errorf("native selection off: NVDA %q, mode %q, page selection %q", nvda, NVDAMode(b), pageSelection())
+	}
+}
