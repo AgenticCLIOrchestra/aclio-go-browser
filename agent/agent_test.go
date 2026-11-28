@@ -124,8 +124,19 @@ func TestScreenReaderGuideFollowsPreset(t *testing.T) {
 	if !strings.Contains(text, `"Review" turns on NVDA's review cursor`) || !strings.Contains(text, "Numpad7") {
 		t.Error("blind preset's prompt doesn't explain review mode")
 	}
-	if !strings.Contains(text, `"Native selection" only turn VoiceOver off`) {
-		t.Error("blind preset's prompt doesn't name the modes that aren't simulated")
+	if !strings.Contains(text, `"Native selection" is browse mode with NVDA's native selection mode on`) || !strings.Contains(text, "Control+C copies the selection") {
+		t.Error("blind preset's prompt doesn't explain selection and native selection")
+	}
+	// Every mode Blind allows is simulated now; Speech and Sleep are only
+	// named for presets that allow them.
+	if strings.Contains(text, "only turn VoiceOver off") {
+		t.Error("blind preset's prompt names modes that aren't simulated, but it allows none")
+	}
+	open := preset.Blind()
+	open.Name = "open"
+	open.NVDAModes = nil
+	if text, err := RenderInitial(initial(t, open)); err != nil || !strings.Contains(text, `"Speech", "Sleep" only turn VoiceOver off`) {
+		t.Errorf("a preset allowing every mode should be told Speech and Sleep aren't simulated (err %v)", err)
 	}
 	// A preset that hears the screen readers but can't change NVDA's mode
 	// isn't told about the action.

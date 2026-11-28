@@ -150,7 +150,11 @@ to the next element of a kind (with Shift, the previous one): H heading, 1-6
 heading of that level, K link, F form field, E edit field, B button, X check
 box, R radio button, C combo box, L list, I list item, G graphic, D landmark,
 T table, S separator, Q block quote; "no next heading" means there is none.
-Enter or Space activates what the cursor is on. Any other character key is
+Enter or Space activates what the cursor is on. Shift with the arrow keys
+(Shift+Control with ArrowLeft / ArrowRight for words), Home / End or Page Up /
+Page Down selects text ("… selected", "… unselected"), Control+A selects all,
+and Control+C copies the selection ("Copied to clipboard: …", or "No
+selection"). Any other character key is
 kept from the page, so typing letters in browse mode jumps around instead of
 typing: move focus into the field (Tab, or Enter on it) first. Tab, Escape and
 other keys still reach the page. Like real NVDA, it switches to "Focus" mode by
@@ -178,6 +182,15 @@ heading"; a key NVDA has no description for says only its name). Nothing
 happens and no key reaches the page until you press NVDA+1 again (or set
 another mode), and NVDA is back in the mode it was in.`, action.NVDAModeInputHelp)
 	}
+	if slices.Contains(allowed, action.NVDAModeNativeSelection) {
+		text += fmt.Sprintf(`
+
+%q is browse mode with NVDA's native selection mode on (or press
+NVDA+Shift+F10 in browse mode; NVDA says "Native app selection mode enabled"
+/ "disabled"): NVDA's text selection is mirrored into the page's own
+selection, and Control+C reaches the page, which copies it itself (so its copy
+handlers run), instead of NVDA copying it. Everything else is as in "Browse".`, action.NVDAModeNativeSelection)
+	}
 	if slices.Contains(allowed, action.NVDAModeReview) {
 		text += fmt.Sprintf(`
 
@@ -195,7 +208,8 @@ cursor. Set another mode to leave it.`, action.NVDAModeReview)
 	var other []string
 	for _, m := range allowed {
 		switch m {
-		case action.NVDAModeFocus, action.NVDAModeBrowse, action.NVDAModeOneKeyPass, action.NVDAModeInputHelp, action.NVDAModeReview:
+		case action.NVDAModeFocus, action.NVDAModeBrowse, action.NVDAModeOneKeyPass, action.NVDAModeInputHelp,
+			action.NVDAModeReview, action.NVDAModeNativeSelection:
 		default:
 			other = append(other, fmt.Sprintf("%q", m))
 		}

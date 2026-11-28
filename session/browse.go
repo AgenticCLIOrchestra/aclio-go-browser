@@ -34,6 +34,12 @@ type nvdaState struct {
 	inReview bool
 	// review is the review cursor (see review.go).
 	review cursorState
+	// sel is browse mode's text selection, nil when nothing is selected;
+	// native is set while native selection mode mirrors it into the page
+	// (see selection.go). Native selection mode lasts across switches to
+	// focus mode and back, as NVDA's does.
+	sel    *selection
+	native bool
 	// The reading cursor: a line of the virtual buffer and a character
 	// offset in it. anchor (the backendDOMNodeId of the line's first node)
 	// finds the line again in a rebuilt buffer; url resets it on another
@@ -96,6 +102,7 @@ func passThroughDone(st *nvdaState) {
 
 func resetCursor(st *nvdaState) {
 	st.line, st.offset, st.anchor, st.url, st.stack = 0, 0, 0, "", nil
+	st.sel = nil
 }
 
 // NVDAMode is b's simulated NVDA mode: action.NVDAModeFocus until an
@@ -105,6 +112,9 @@ func resetCursor(st *nvdaState) {
 func NVDAMode(b *Browser) action.NVDAMode {
 	if b == nil {
 		return action.NVDAModeFocus
+	}
+	if m := modeOf(b.nvda); m == action.NVDAModeBrowse && b.nvda.native {
+		return action.NVDAModeNativeSelection // browse mode, with native selection on
 	}
 	return modeOf(b.nvda)
 }
@@ -172,9 +182,14 @@ func setNVDAMode(b *Browser, m action.NVDAMode) error {
 			enterInputHelp(nil, st)
 		case action.NVDAModeReview:
 			enterReview(nil, st)
+		case action.NVDAModeNativeSelection:
+			st.mode, st.auto, st.native = action.NVDAModeBrowse, false, true
 		default:
 			if st.inReview {
 				leaveReview(st)
+			}
+			if m == action.NVDAModeBrowse {
+				st.native = false
 			}
 			st.mode, st.auto = m, false
 		}
@@ -202,9 +217,19 @@ func setNVDAMode(b *Browser, m action.NVDAMode) error {
 	if a.nvda.inReview && modeOf(a.nvda) == action.NVDAModeReview {
 		leaveReview(a.nvda) // then on to the mode asked for
 	}
+	// Native selection is browse mode with native selection mode on; plain
+	// Browse turns it off.
+	native := m == action.NVDAModeNativeSelection
+	if native {
+		m = action.NVDAModeBrowse
+	}
 	switchMode(a, a.nvda, m, false)
 	if m == action.NVDAModeBrowse {
 		cursorToFocus(a)
+		if native != a.nvda.native && a.cdp != nil {
+			return toggleNativeSelection(a, native)
+		}
+		a.nvda.native = native
 	}
 	return nil
 }
@@ -578,6 +603,34 @@ func nvdaKey(b *Browser, key string) (bool, *string, error) {
 		}
 		return false, nil, nil
 	}
+	// Text selection (see selection.go).
+	switch {
+	case k.nvda && k.shift && !k.ctrl && !k.alt && k.base == "F10":
+		if err := toggleNativeSelection(a, !st.native); err != nil {
+			return true, nil, err
+		}
+		return handled(nvdaHandled)
+	case k.ctrl && !k.shift && !k.alt && !k.nvda && strings.ToLower(k.base) == "c":
+		if st.native {
+			return false, nil, nil // native selection: the page copies its own selection
+		}
+		if err := copySelection(a, buf); err != nil {
+			return true, nil, err
+		}
+		return handled(nvdaHandled)
+	}
+	if ok, err := selectKey(a, buf, k); ok || err != nil {
+		if err != nil {
+			return true, nil, err
+		}
+		return handled(nvdaHandled)
+	}
+	// Moving the cursor without Shift drops the selection, once it has read
+	// where it moved to.
+	var dropped *selection
+	if st.sel != nil && (browseKeys[k.base] && k.base != "Enter" && k.base != "Space" || k.ctrl && (k.base == "Home" || k.base == "End" || k.base == "ArrowLeft" || k.base == "ArrowRight")) && !k.nvda {
+		dropped = st.sel
+	}
 	last := len(buf.lines) - 1
 	switch {
 	case k.nvda && k.base == "ArrowDown" && !k.ctrl && !k.alt:
@@ -634,6 +687,11 @@ func nvdaKey(b *Browser, key string) (bool, *string, error) {
 	default:
 		return false, nil, nil // Tab, Escape, F-keys, Backspace, … reach the page
 	}
+	if dropped != nil {
+		if err := unselect(a, buf, *dropped); err != nil {
+			return true, nil, err
+		}
+	}
 	return handled(nvdaHandled)
 }
 
@@ -645,7 +703,7 @@ func nvdaTakesKeys(b *Browser) bool {
 		return false
 	}
 	switch NVDAMode(b) {
-	case action.NVDAModeBrowse, action.NVDAModeOneKeyPass, action.NVDAModeInputHelp:
+	case action.NVDAModeBrowse, action.NVDAModeNativeSelection, action.NVDAModeOneKeyPass, action.NVDAModeInputHelp:
 		return true
 	case action.NVDAModeReview:
 		return b.nvda.before == action.NVDAModeBrowse // its other keys are browse mode's

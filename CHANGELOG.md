@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0] - 2026-11-28
+
+### Added
+- Text selection in NVDA's browse mode, as NVDA's cursorManager and `speech.speakSelectionChange` do it:
+  - Shift+ArrowRight / Shift+ArrowLeft select by character, Shift+Control+ArrowRight / ArrowLeft by word, Shift+ArrowDown / Shift+ArrowUp by line, Shift+PageDown / Shift+PageUp by 25 lines, Shift+Home / Shift+End to the line's start / end, Shift+Control+Home / Shift+Control+End to the top / bottom, and Control+A everything
+  - NVDA says what became selected ("ead selected") or unselected ("ad unselected"), spelling a single character ("space selected"). Moving the cursor without Shift drops the selection ("Read unselected", after reading where it moved)
+  - Control+C copies the selection to the clipboard and says "Copied to clipboard: …" (the number of characters past 1024), "No selection" or "Unable to copy". Pasting into a field later pastes it
+- NVDA's native selection mode. The `Native selection` mode, or NVDA+Shift+F10 in browse mode (as NVDA's `toggleNativeAppSelectionMode`, which its Chrome buffer supports), is browse mode with native selection on: NVDA says "Native app selection mode enabled" / "disabled", mirrors its selection into the page's own selection, and lets Control+C reach the page, which copies the selection itself (its copy handlers run). It lasts across switches to focus mode and back; setting `Browse` turns it off. `session.NVDAMode` reports it as `Native selection` while in browse mode
+- Input help describes NVDA+Shift+F10 ("Toggles native selection mode on and off"); the selection keys and Control+C have no description in NVDA's source, so only their name is said
+
+### Changed
+- `DefaultInitialPrompt` explains selecting and copying in browse mode, and native selection to a preset that allows it. A preset that allows every NVDA mode is told that only `Speech` and `Sleep` aren't simulated; `Blind()`, which allows neither, isn't told about any
+
 ## [0.28.0] - 2026-11-27
 
 ### Added
@@ -292,6 +305,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT `LICENSE`
 - CI: PR checks (Go build, vet + test, changelog and version validation) and a post-merge release pipeline (git tag, GitHub release with the version's changelog entry, Go proxy trigger)
 
+[0.29.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/AgenticCLIOrchestra/aclio-go-browser/compare/v0.25.0...v0.26.0

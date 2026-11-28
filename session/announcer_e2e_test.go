@@ -611,18 +611,18 @@ func TestE2ENVDAModeTurnsVoiceOverOff(t *testing.T) {
 	mode := func(m action.NVDAMode) action.Action {
 		return action.Action{Type: action.TypeNVDAChangeMode, Data: action.NVDAChangeMode{Mode: m}}
 	}
-	// Native selection: a mode whose own behaviour isn't simulated (Browse
-	// switches to focus mode by itself in a text field, see
+	// Speech: a mode whose own behaviour isn't simulated (Browse and Native
+	// selection switch to focus mode by itself in a text field, see
 	// TestE2EBrowseModeSwitching; Review says "Document review").
-	do(t, b, press("Tab"), mode(action.NVDAModeNativeSelection), press("Tab"))
+	do(t, b, press("Tab"), mode(action.NVDAModeSpeech), press("Tab"))
 	vo, nvda := heardBoth(t, b, "", 500*time.Millisecond)
 	if want := []string{"main", "Prefs", "form", "First", "edit text"}; !reflect.DeepEqual(vo, want) {
-		t.Errorf("VoiceOver said %q, want only what it said before Native selection %q", vo, want)
+		t.Errorf("VoiceOver said %q, want only what it said before Speech %q", vo, want)
 	}
 	if want := []string{"main landmark", "Prefs", "form", "First", "edit", "Second", "edit"}; !reflect.DeepEqual(nvda, want) {
 		t.Errorf("NVDA said %q, want %q", nvda, want)
 	}
-	if got := NVDAMode(b); got != action.NVDAModeNativeSelection {
+	if got := NVDAMode(b); got != action.NVDAModeSpeech {
 		t.Errorf("mode = %q", got)
 	}
 	do(t, b, mode(action.NVDAModeFocus), press("Tab"))
